@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Ignore the entire data directory
+data/
+
+*.csv
+*.xlsx
+*.rds
+*.sav
+*.dta

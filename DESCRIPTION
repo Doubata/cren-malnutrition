@@ -1,0 +1,25 @@
+Package: crenMalnutrition
+Title: Nutritional Assessment Tools for SAM Management
+Version: 0.1.0
+Authors@R: 
+    person("Doubata Dramane Marius", "COULIBALY", email = "dramanecoulibaly.1111@gmail.com", 
+           role = c("aut", "cre"))
+Description: Tools for computing WHO-standard nutritional indicators
+    and therapeutic feeding validation for severe acute malnutrition.
+License: MIT + file LICENSE
+URL: https://github.com/Doubata/cren-malnutrition
+BugReports: https://github.com/Doubata/cren-malnutrition/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    checkmate,
+    dplyr,
+    stringr,
+    lifecycle
+Suggests:
+    pkgdown,
+    devtools,
+    testthat
+    
+

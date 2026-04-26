@@ -1,12 +1,15 @@
-source(here::here("scripts", "00_setup.R"))
 
 # Import WHO Refrence Tables DF  -----------------------------------------------
-who_ptz_df       <- read_csv2(here::here("data", "raw", "OMS_ptz.csv"), locale = locale(encoding = "UTF-8"))
-who_f75_df       <- read_csv2(here::here("data", "raw", "OMS_f75.csv"), locale = locale(encoding = "UTF-8"))
-who_f100_df      <- read_csv2(here::here("data", "raw", "OMS_f100.csv"), locale = locale(encoding = "UTF-8"))
-who_f100d_bf_df  <- read_csv2(here::here("data", "raw", "OMS_f100d_allait.csv"), locale = locale(encoding = "UTF-8"))
-who_f100d_nbf_df <- read_csv2(here::here("data", "raw", "OMS_f100d_nonAllait.csv"), locale = locale(encoding = "UTF-8"))
-who_plumpynut_df <- read_csv2(here::here("data", "raw", "OMS_atpe.csv"), locale = locale(encoding = "UTF-8"))
+WHO_F75_std         <- read_csv2(here::here("data", "raw", "WHO_F75_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_F75_oed3_std    <- read_csv2(here::here("data", "raw", "WHO_F75_oed3_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_F100_std        <- read_csv2(here::here("data", "raw", "WHO_F100_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_F100d_bf        <- read_csv2(here::here("data", "raw", "WHO_F100d_bf.csv"), locale = locale(encoding = "UTF-8"))
+WHO_F100d_nbf       <- read_csv2(here::here("data", "raw", "WHO_F100d_nbf.csv"), locale = locale(encoding = "UTF-8"))
+WHO_RUTF_std        <- read_csv2(here::here("data", "raw", "WHO_RUTF_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_WFH_boys02_std  <- read_csv2(here::here("data", "raw", "WHO_WFH_boys_0_2_z_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_WFH_boys25_std  <- read_csv2(here::here("data", "raw", "WHO_WFH_boys_2_5_z_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_WFH_girls02_std <- read_csv2(here::here("data", "raw", "WHO_WFH_girls_0_2_z_std.csv"), locale = locale(encoding = "UTF-8"))
+WHO_WFH_girls25_std <- read_csv2(here::here("data", "raw", "WHO_WFH_girls_2_5_z_std.csv"), locale = locale(encoding = "UTF-8"))
 
 
 # Import Children Demographics DF  ---------------------------------------------
@@ -23,8 +26,10 @@ monitoring_cols <- c("id", "dateVis", "taille", "poids", "ptZscore", "pbOrPc", "
                      "bouillieCorrige", "plaFamil", "plaFamilCorrige" ,"aPlats", "selles", "vomiss",
                      "vomissCorrige", "index")
 
-monitoring_df <- read_csv2(here::here("data", "raw", "suivi_11092023.csv"), locale = locale(encoding = "UTF-8"),
-                          col_select = all_of(monitoring_cols))
+monitoring_df <- read_csv2(here::here("data", "raw", "suivi_11092023.csv"),
+                           locale = locale(encoding = "UTF-8"),
+                           guess_max = 5000,
+                           col_select = all_of(monitoring_cols))
 
 # Import Morbidity DF  ---------------------------------------------------------
 morbidity_cols <- c("gastroenteriteAigue", "deshydratation", "choc", "pneumopathieViraleBacterienne",

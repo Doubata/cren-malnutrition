@@ -1,4 +1,3 @@
-source(here::here("scripts", "00_setup.R"))
 source(here::here("scripts", "01_data_cleaning", "01_shared_transform.R"))
 
 child_e6a59sO <- child_clean %>%
@@ -12,7 +11,7 @@ filter(!is.na(age_range_6_59)) %>%
   filter(has_edema == FALSE) %>%
   
   # by complex physical and Z-score criteria
-  filter(weight >= 3.5, whz %in% c("inf-3", "inf-4", "-4") | (muac == "pb" & muac_val < 115)) %>%
+  filter(weight >= 3.5, whz %in% c("-3", "-4") | (muac == "pb" & muac_val < 115)) %>%
   
   # by rows where phase starts with "1"
   filter(str_starts(phase_series, "1")) %>%
@@ -22,60 +21,46 @@ mutate(
 
   # . Length of stay [days] in phase 1  ####
   length_p1 = get_series_length_at(
-    df        = monitoring_clean, 
-    id_col    = "id", 
-    val_col   = "phase",
-    run_order = 1, 
-    ids       = id
+    df         = monitoring_clean, 
+    id_col     = "id", 
+    target_col= "phase",
+    run_order  = 1, 
+    ids        = id
   ),
   
-  # . Change in nutritional treatment [F75 to F75F] in phase 1  ####
-  f75_to_f75f_p1 = detect_changes(
-    df        = monitoring_clean, 
-    id_col    = "id", 
-    phase_col = "phase", 
-    val_col   = "typeAlim",
-    from      = c("F75"), 
-    to        = c("F75F"), 
-    run_order = 1, 
-    ids       = id
+  f75_to_f75f_p1 = detect_state_transition(
+    df         = monitoring_clean, 
+    id_col     = "id", 
+    phase_col  = "phase", 
+    target_col = "typeAlim",
+    from       = "F75", 
+    to         = "F75F",
+    ids        = id,
+    run_order  = 1
   ),
   
   # . Appearance of oedema in phase 1  ####
-  edema_incident_p1 = detect_changes(
-    df        = monitoring_clean, 
-    id_col    = "id", 
-    phase_col = "phase", 
-    val_col   = "oedemes",
-    from      = c("MISSING", NA, 0), 
-    run_order = 1,
-    ids       = id
+  edema_incident_p1 = detect_state_transition(
+    df         = monitoring_clean, 
+    id_col     = "id", 
+    phase_col  = "phase", 
+    target_col = "oedemes",
+    from       = c("MISSING", NA, 0),
+    ids        = id,
+    run_order  = 1
   ),
   
   # . Duration [days] of tube feeding in phase 1  ####
-  length_tubefeeding_p1 = get_event_length(
-    df        = monitoring_clean, 
-    id_col    = "id", 
-    phase_col = "phase", 
-    event     = "sonde",
-    col_names = c("repasH1", "repasH2", "repasH3", "repasH4", "repasH5",
-                  "repasH6", "repasH7", "repasH8", "repasH9", "repasH10"),
-    run_order = 1, 
-    func      = "any", 
-    ids       = id
-  ),
-  
-  # . Duration [days] of tube feeding in phase 1  ####
-  length_tubefeeding_p1 = get_event_length(
-    df        = monitoring_clean, 
-    id_col    = "id", 
-    phase_col = "phase", 
-    event     = "sonde",
-    col_names = c("repasH1", "repasH2", "repasH3", "repasH4", "repasH5",
-                  "repasH6", "repasH7", "repasH8", "repasH9", "repasH10"),
-    run_order = 1, 
-    func      = "any", 
-    ids       = id
+  length_tubefeeding_p1 = summarise_event(
+    df          = monitoring_clean, 
+    id_col      = "id", 
+    phase_col   = "phase", 
+    event       = "sonde",
+    target_cols = c("repasH1", "repasH2", "repasH3", "repasH4", "repasH5",
+                    "repasH6", "repasH7", "repasH8", "repasH9", "repasH10"),
+    ids         = id,
+    run_order   = 1, 
+    type        = "any"
   ),
   
   # . Death in phase 1 ####
@@ -98,10 +83,10 @@ mutate(
   ),
   
   # . Nutritional treatment during phase 1 ####
-  nutri_treat_series = extract_matching_series_str(
+  nutri_treat_series = get_matching_series_str(
     df        = monitoring_clean, 
     id_col    = "id",
-    val_col   = "typeAlim", 
+    target_col   = "typeAlim", 
     ref_col   = "phase", 
     attr_col  = "ATPE",
     run_order = 1, 
@@ -135,85 +120,116 @@ mutate(
     TRUE ~ "Others"
   ),
   
-  # . Proportion Frequency F75/F75F less ####
-  prop_f75x_freq_less_p1  = get_flag_proportion(
-    df             = monitoring_clean,
-    id_col         = "id",
-    phase_col      = "phase",
-    validation_col = "f75x_freq_validation",
-    flag           = "less",
-    run_order      = 1, 
-    ids            = id
+  prop_whz_error_p1 = summarise_event(
+    df          = monitoring_clean,
+    id_col      = "id",
+    phase_col   = "phase",
+    event       = "Not Equal",
+    target_cols = "whz_validation",
+    ids         = id,
+    run_order   = 1,
+    type        = "proportion"
   ),
-    
+  
+  prop_f75x_freq_less_p1 = summarise_event(
+    df          = monitoring_clean,
+    id_col      = "id",
+    phase_col   = "phase",
+    event       = "less",
+    target_cols = "f75x_freq_validation",
+    ids         = id,
+    run_order   = 1,
+    type        = "proportion"
+  ),
+  
   # . Proportion Frequency F75/F75F more  ####
-  prop_f75x_freq_more_p1  = get_flag_proportion(
-    df             = monitoring_clean,
-    id_col         = "id",
-    phase_col      = "phase",
-    validation_col = "f75x_freq_validation",
-    flag           = "more",
-    run_order      = 1, 
-    ids            = id
+  prop_f75x_freq_more_p1 = summarise_event(
+    df          = monitoring_clean,
+    id_col      = "id",
+    phase_col   = "phase",
+    event       = "more",
+    target_cols = "f75x_freq_validation",
+    ids         = id,
+    run_order   = 1, 
+    type        = "proportion"
   ),
     
   # . Proportion Quantity F75/F75F less  ####
-  prop_f75x_qty_less_p1  = get_flag_proportion(
-    df             = monitoring_clean, 
-    id_col         = "id", 
-    phase_col      = "phase",
-    validation_col = "f75x_qty_validation",
-    flag           = "less",
-    run_order      = 1,
-    ids            = id
-    ),
+  prop_f75x_qty_less_p1 = summarise_event(
+    df          = monitoring_clean, 
+    id_col      = "id", 
+    phase_col   = "phase",
+    event       = "less",
+    target_cols = "f75x_qty_validation",
+    ids         = id,
+    run_order   = 1,
+    type        = "proportion"
+  ),
     
   # . Proportion Quantity F75/F75F more  ####
-  prop_f75x_qty_more_p1  = get_flag_proportion(
-    df             = monitoring_clean, 
-    id_col         = "id", 
-    phase_col      = "phase",
-    validation_col = "f75x_qty_validation",
-    flag           = "more", 
-    run_order      = 1, 
-    ids            = id
+  prop_f75x_qty_more_p1 = summarise_event(
+    df          = monitoring_clean, 
+    id_col      = "id", 
+    phase_col   = "phase",
+    event       = "more",
+    target_cols = "f75x_qty_validation",
+    ids         = id,
+    run_order   = 1, 
+    type        = "proportion"
   ),
     
   # . Proportion Adherence F75/F75F less  ####
-  prop_f75x_adh_less_p1  = get_flag_proportion(
-    df             = monitoring_clean, 
-    id_col         = "id", 
-    phase_col      = "phase",
-    validation_col = "f75x_adh_validation",
-    flag           = "less", 
-    run_order      = 1, 
-    ids            = id
+  prop_f75x_adh_less_p1 = summarise_event(
+    df          = monitoring_clean, 
+    id_col      = "id", 
+    phase_col   = "phase",
+    event       = "less", 
+    target_cols = "f75x_adh_validation",
+    ids         = id,
+    run_order   = 1, 
+    type        = "proportion"
   ),
     
   # . Proportion Adherence F75/F75F more  ####
-  prop_f75x_adh_more_p1  = get_flag_proportion(
-    df             = monitoring_clean, 
-    id_col         = "id", 
-    phase_col      = "phase",
-    validation_col = "f75x_adh_validation",
-    flag           = "more", 
-    run_order      = 1, 
-    ids            = id
+  prop_f75x_adh_more_p1 = summarise_event(
+    df          = monitoring_clean, 
+    id_col      = "id", 
+    phase_col   = "phase",
+    event       = "more", 
+    target_cols = "f75x_adh_validation",
+    ids         = id,
+    run_order   = 1, 
+    type        = "proportion"
+  ),
+  
+  # . Proportion of Consumption of family meals in phase 1  ####
+  prop_familymeals_p1 = summarise_event(
+    df          = monitoring_clean,
+    id_col      = "id",
+    phase_col   = "phase",
+    event       = "oui",
+    target_cols = "plaFamilCorrige",
+    ids         = id,
+    run_order   = 1,
+    type        = "proportion"
+  ),
+  
+  prop_food_intolerance_p1 = summarise_event(
+    df          = monitoring_clean,
+    id_col      = "id",
+    phase_col   = "phase",
+    event       = "TRUE",
+    target_cols = "food_intolerance",
+    ids         = id,
+    run_order   = 1,
+    type        = "proportion"
   )
   
 )
 
-# summary(child_e6a59sO$has_failed_p1)
-# glimpse(child_e6a59sO)
-
-
-
-# library(gtsummary)
-# library(labelled)
-
-################################
-###  Phase de stabilisation  ###
-################################
+###############################
+##  Phase de stabilisation  ###
+###############################
 child_e6a59sO <- set_variable_labels(
   child_e6a59sO,
   # Variables de controle
@@ -225,26 +241,25 @@ child_e6a59sO <- set_variable_labels(
   length_p1 = "Length of stay Phase 1",
   death_p1 = "Death on phase 1",
   death_day1_p1 = "Death on the first day of phase 1",
-  
+
   # Variables independantes
   is_breastfed = "Breast feeding",
-  zscoreError = "Determining WFH Zscore", # To be completed
+  prop_whz_error_p1 = "WFH Zscore Determining Error [%]", # To be completed
   nutri_treat_p1 = "Therapeutic food Phase 1",
 
   #
   prop_f75x_freq_less_p1 = "F75/F75F Frequency Inadequacy [%]",
   prop_f75x_freq_more_p1 = "F75/F75F Frequency Excess [%]",
-  
+
   prop_f75x_qty_less_p1 = "F75/F75F Quantity Inadequacy [%]",
   prop_f75x_qty_more_p1 = "F75/F75F Quantity Excess [%]",
-  
+
   prop_f75x_adh_less_p1 = "F75/F75F Intake Inadequacy [%]",
   prop_f75x_adh_more_p1 = "F75/F75F Intake Excess [%]",
 
-  # plaFamilPropOui = "Consumption of familial foods",
-  # plaFamilPropOui.2 = "Consumption of familial foods",
-  # mauvTolerancePropOui = "Poor tolerance",
-  
+  prop_familymeals_p1 = "Consumption of familial foods [%]",
+  prop_food_intolerance_p1  = "Food intolerance [%]",
+
   # Comorbidite
   morbidite = "Morbidity",
   has_gastroenteritis = "Gastroenteritis",

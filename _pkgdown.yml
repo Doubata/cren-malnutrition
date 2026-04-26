@@ -1,0 +1,18 @@
+url: https://github.com/Doubata/cren-malnutrition/
+
+template:
+  bootstrap: 5
+  
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+    
+repo:
+  url:
+    home: https://github.com/Doubata/cren-malnutrition
+    source: https://github.com/Doubata/cren-malnutrition/blob/main/
+    issue: https://github.com/Doubata/cren-malnutrition/issues/
+',
+  con = "_pkgdown.yml"
+)

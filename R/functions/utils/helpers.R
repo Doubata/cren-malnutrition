@@ -68,36 +68,32 @@
 #'   \code{\link{count_by_id}}
 #'
 #' @keywords internal
-.get_values_by_id <- function(df, val_col, id_col, ..., attr_col = NULL) {
+.get_values_by_id <- function(df, val_col, id_col, attr_col = NULL) {
   
-  # Coerce to character and sentinel-fill NAs to preserve run positions
-  df[[val_col]] <- as.character(df[[val_col]])
-  df[is.na(df[[val_col]]), val_col] <- "MISSING"
+  # 1. Base values: convert NA to "MISSING" so rle() groups them together
+  vals <- as.character(df[[val_col]])
+  vals[is.na(vals)] <- "MISSING"
   
-  id_factor <- as.character(df[[id_col]])
+  # Preserve order with levels = unique()
+  id_factor <- factor(df[[id_col]], levels = unique(df[[id_col]]))
   
-  if (is.null(attr_col)) {
-    # Simple split: target column only
-    values_list <- split(df[[val_col]], id_factor)
-    
-  } else {
-    # Combine target + attribute into a single "value+attr" column,
-    # keeping the plain value when attr is MISSING (i.e. was originally NA)
-    df[[attr_col]] <- as.character(df[[attr_col]])
-    df[is.na(df[[attr_col]]), attr_col] <- "MISSING"
-    
-    df[[new_val_col]] <- ifelse(
-      df[[attr_col]] == "MISSING",
-      df[[val_col]],
-      paste0(df[[val_col]], "+", df[[attr_col]])
-    )
-    
-    values_list <- split(df[[new_val_col]], id_factor)
+  # 2. Return plain vals if no attr_col is provided
+  if (is.null(attr_col) || !attr_col %in% names(df)) {
+    return(split(vals, id_factor))
   }
   
-  return(values_list)
+  # 3. Combine val + attr ONLY where attr is NOT NA
+  raw_attrs <- df[[attr_col]]
+  has_attr  <- !is.na(raw_attrs)
+  
+  combined_vals <- vals
+  if (any(has_attr)) {
+    attrs <- as.character(raw_attrs[has_attr])
+    combined_vals[has_attr] <- paste0(vals[has_attr], "+", attrs)
+  }
+  
+  return(split(combined_vals, id_factor))
 }
-
 
 
 #' Map Patient Weights to WHO Lookup Table Row Indices

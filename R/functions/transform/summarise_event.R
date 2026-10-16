@@ -194,14 +194,14 @@ summarise_event <- function(df, id_col, phase_col, event, target_cols, ids,
              # Supersedes get_prop_flag() and get_event_prop(type = "row_wise")
              valid_rows <- rowSums(!is.na(vals)) > 0
              if (sum(valid_rows) == 0) return(NA_real_)
-             sum(hits[valid_rows]) / sum(valid_rows)
+             round(sum(hits[valid_rows]) / sum(valid_rows), 2)
            },
            
            "density" = {
              # Supersedes get_event_prop(type = "point_wise")
              denom <- sum(!is.na(vals))
              if (denom == 0) return(NA_real_)
-             sum(vals == event_chr, na.rm = TRUE) / denom
+             round(sum(vals == event_chr, na.rm = TRUE) / denom, 2)
            },
            
            "consecutive" = {

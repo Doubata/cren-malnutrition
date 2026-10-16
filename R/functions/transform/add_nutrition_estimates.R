@@ -23,7 +23,7 @@
 #'     \item \code{phase}                — phase label (character), used as
 #'           the run-length reference series.
 #'     \item \code{typeAlim}             — nutritional product given (character).
-#'     \item \code{ATPE}                 — RUTF attribute column (character).
+#'     \item \code{rutf}                 — RUTF attribute column (character).
 #'     \item \code{f75x_freq_validation} — frequency adherence label
 #'           (\code{"less"} / \code{"within"} / \code{"more"}).
 #'     \item \code{f75x_qty_validation}  — quantity adherence label.
@@ -53,7 +53,7 @@
 #'   \item{\code{nutri_treat_series_p{phase}}}{Character. Dash-separated
 #'         run-length encoded string of nutritional products given during
 #'         the \code{run_idx}-th phase run, with RUTF attribute appended as
-#'         \code{"product+ATPE"} where present (e.g. \code{"F75-F75F"}).}
+#'         \code{"product+rutf"} where present (e.g. \code{"F75-F75F"}).}
 #'   \item{\code{nutri_treat_p{phase}}}{Character. Generalised nutritional
 #'         treatment category. One of: \code{"F75"}, \code{"F75F"},
 #'         \code{"F75-F75F"}, \code{"F75F-F75"}, \code{"F75+RUTF"},
@@ -159,216 +159,408 @@
 #' @importFrom stringr str_detect str_starts
 #'
 #' @export
-add_nutrition_estimates <- function(child_df, monitoring_df, phase, run_idx) {
+add_nutrition_estimates <- function(child_df, monitoring_df, cohort=NULL, phase=NULL, run_idx=NULL) {
   
   # --- 1. Validation -------------------------------------------------------
   assert_data_frame(child_df,      min.rows = 1)
   assert_data_frame(monitoring_df, min.rows = 1)
   assert_names(names(monitoring_df),
-               must.include = c("id", "phase", "typeAlim", "ATPE",
+               must.include = c("id", "phase", "typeAlim", "rutf",
                                 "f75x_freq_validation", "f75x_qty_validation",
                                 "f75x_adh_validation", "plaFamilCorrige",
                                 "food_intolerance"))
-  assert_count(phase,   positive = TRUE)
-  assert_count(run_idx, positive = TRUE)
+  # assert_count(phase,   positive = TRUE)
+  # assert_count(run_idx, positive = TRUE)
   
-  # --- 2. Column Registry --------------------------------------------------
-  # Centralised list of all new columns to be suffixed with _p{phase}.
-  # Add or remove columns here only — the mutate() block handles computation,
-  # rename_with() handles suffixing.
-  phase_cols <- c(
-    "nutri_treat_series",
-    "nutri_treat",
-    "prop_f75x_freq_less",
-    "prop_f75x_freq_more",
-    "prop_f75x_qty_less",
-    "prop_f75x_qty_more",
-    "prop_f75x_adh_less",
-    "prop_f75x_adh_more",
-    "prop_familymeals",
-    "prop_food_intolerance"
-  )
-  
-  # --- 3. Enrichment Pipeline ----------------------------------------------
   df_enriched <- child_df %>%
     mutate(
-      
-      # --- Nutritional Treatment Series ------------------------------------
-      # Run-length encoded string of products given during run_idx phase run.
-      # RUTF attribute appended as "product+ATPE" where present.
-      nutri_treat_series = get_matching_series_str(
-        df         = monitoring_df,
-        id_col     = "id",
-        target_col = "typeAlim",
-        ref_col    = "phase",
-        attr_col   = "ATPE",
-        run_order  = run_idx,
-        ids        = id
-      ),
-      
-      # --- Generalised Treatment Category ----------------------------------
-      # Ordered regex classification — "Others" is a catch-all.
-      # Inspect output rows classified as "Others" for unexpected patterns.
-      nutri_treat = case_when(
-        
-        # Pure MISSING series → no valid treatment recorded
-        nutri_treat_series == "MISSING"
-        ~ NA_character_,
-        
-        # Only F75 (and MISSING gaps)
-        str_detect(nutri_treat_series, "^(F75|MISSING)(-(F75|MISSING))*$")
-        ~ "F75",
-        
-        # Only F75F (and MISSING gaps)
-        str_detect(nutri_treat_series, "^(F75F|MISSING)(-(F75F|MISSING))*$")
-        ~ "F75F",
-        
-        # Transition F75 → F75F, no F100 or F100d involvement
-        (str_starts(nutri_treat_series, "F75-F75F") |
-           nutri_treat_series == "F75-MISSING-F75F") &
-          !str_detect(nutri_treat_series, "F100") &
-          !str_detect(nutri_treat_series, "F100d")
-        ~ "F75-F75F",
-        
-        # Transition F75F → F75, no F100 or F100d involvement
-        (str_starts(nutri_treat_series, "F75F-F75") |
-           nutri_treat_series == "F75F-MISSING-F75") &
-          !str_detect(nutri_treat_series, "F100") &
-          !str_detect(nutri_treat_series, "F100d")
-        ~ "F75F-F75",
-        
-        # Only F75 + RUTF (and MISSING gaps)
-        str_detect(nutri_treat_series,
-                   "^(F75\\+Plumpy|MISSING)(-(F75\\+Plumpy|MISSING))*$")
-        ~ "F75+RUTF",
-        
-        # Only F75F + RUTF (and MISSING gaps)
-        str_detect(nutri_treat_series,
-                   "^(F75F\\+Plumpy|MISSING)(-(F75F\\+Plumpy|MISSING))*$")
-        ~ "F75F+RUTF",
-        
-        # Only F100 (and MISSING gaps)
-        str_detect(nutri_treat_series, "^(F100|MISSING)(-(F100|MISSING))*$")
-        ~ "F100",
-        
-        # Only F100d (and MISSING gaps)
-        str_detect(nutri_treat_series, "^(F100d|MISSING)(-(F100d|MISSING))*$")
-        ~ "F100d",
-        
-        # Catch-all — inspect if this appears in output
-        TRUE ~ "Others"
-      ),
-      
-      # --- F75/F75F Frequency Validation -----------------------------------
-      # Proportion of phase-run rows where prescribed frequency < WHO target
-      prop_f75x_freq_less = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "less",
-        target_cols = "f75x_freq_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # Proportion of phase-run rows where prescribed frequency > WHO target
-      prop_f75x_freq_more = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "more",
-        target_cols = "f75x_freq_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # --- F75/F75F Quantity Validation ------------------------------------
-      # Proportion of phase-run rows where prescribed quantity < WHO target
-      prop_f75x_qty_less = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "less",
-        target_cols = "f75x_qty_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # Proportion of phase-run rows where prescribed quantity > WHO target
-      prop_f75x_qty_more = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "more",
-        target_cols = "f75x_qty_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # --- F75/F75F Adherence Validation -----------------------------------
-      # Proportion of phase-run rows where actual daily intake < WHO target
-      prop_f75x_adh_less = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "less",
-        target_cols = "f75x_adh_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # Proportion of phase-run rows where actual daily intake > WHO target
-      prop_f75x_adh_more = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "more",
-        target_cols = "f75x_adh_validation",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # --- Family Meal Consumption -----------------------------------------
-      # Proportion of phase-run rows where family meals were consumed
-      prop_familymeals = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "oui",
-        target_cols = "plaFamilCorrige",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
-      ),
-      
-      # --- Food Intolerance ------------------------------------------------
-      # Proportion of phase-run rows where food intolerance was recorded
-      prop_food_intolerance = summarise_event(
-        df          = monitoring_df,
-        id_col      = "id",
-        phase_col   = "phase",
-        event       = "TRUE",
-        target_cols = "food_intolerance",
-        ids         = id,
-        run_order   = run_idx,
-        type        = "proportion"
+      is_breastfed = case_when(
+        age_month < 25 ~ "Yes",
+        TRUE ~ is_breastfed
       )
-    ) %>%
+    )
+  
+  if(cohort %in% c("c659_noedema", "c659_edema")){
     
-    # --- 4. Column Suffixing -----------------------------------------------
-  # Append _{phase} to every column in phase_cols, enabling collision-free
-  # multi-phase iteration when this function is called repeatedly.
-  # e.g. phase = "1" → nutri_treat_P1, prop_familymeals_P1, etc.
-  rename_with(
-    .fn   = ~ paste0(.x, "_P", phase),
-    .cols = all_of(phase_cols)
-  )
+    # --- 2. Column Registry --------------------------------------------------
+    # Centralised list of all new columns to be suffixed with _p{phase}.
+    # Add or remove columns here only — the mutate() block handles computation,
+    # rename_with() handles suffixing.
+    phase_cols <- c(
+      "nutri_treat_series",
+      "nutri_treat",
+      "prop_f75x_freq_less",
+      "prop_f75x_freq_more",
+      "prop_f75x_qty_less",
+      "prop_f75x_qty_more",
+      "prop_f75x_adh_less",
+      "prop_f75x_adh_more",
+      "prop_familymeals",
+      "prop_food_intolerance"
+    )
+    
+    # --- 3. Enrichment Pipeline ----------------------------------------------
+    df_enriched <- df_enriched %>%
+      mutate(
+        
+        # --- Nutritional Treatment Series ------------------------------------
+        # Run-length encoded string of products given during run_idx phase run.
+        # RUTF attribute appended as "product+rutf" where present.
+        nutri_treat_series = get_matching_series_str(
+          df         = monitoring_df,
+          id_col     = "id",
+          target_col = "typeAlim",
+          ref_col    = "phase",
+          attr_col   = "rutf",
+          run_order  = run_idx,
+          ids        = id
+        ),
+
+        # --- Generalised Treatment Category ----------------------------------
+        nutri_treat = generalize_nutri_treatement(nutri_treat_series),
+        
+        # --- F75/F75F Frequency Validation -----------------------------------
+        # Proportion of phase-run rows where prescribed frequency < WHO target
+        prop_f75x_freq_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f75x_freq_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_freq_less = coalesce(prop_f75x_freq_less, 0),
+        
+        # Proportion of phase-run rows where prescribed frequency > WHO target
+        prop_f75x_freq_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f75x_freq_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_freq_more = coalesce(prop_f75x_freq_more, 0),
+        
+        # --- F75/F75F Quantity Validation ------------------------------------
+        # Proportion of phase-run rows where prescribed quantity < WHO target
+        prop_f75x_qty_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f75x_qty_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_qty_less = coalesce(prop_f75x_qty_less, 0),
+        
+        # Proportion of phase-run rows where prescribed quantity > WHO target
+        prop_f75x_qty_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f75x_qty_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_qty_more = coalesce(prop_f75x_qty_more, 0),
+        
+        # --- F75/F75F Adherence Validation -----------------------------------
+        # Proportion of phase-run rows where actual daily intake < WHO target
+        prop_f75x_adh_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f75x_adh_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_adh_less = coalesce(prop_f75x_adh_less, 0),
+        
+        # Proportion of phase-run rows where actual daily intake > WHO target
+        prop_f75x_adh_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f75x_adh_validation",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f75x_adh_more = coalesce(prop_f75x_adh_more, 0),
+        
+        # --- Family Meal Consumption -----------------------------------------
+        # Proportion of phase-run rows where family meals were consumed
+        prop_familymeals = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "oui",
+          target_cols = "plaFamilCorrige",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_familymeals = coalesce(prop_familymeals, 0),
+        
+        # --- Food Intolerance ------------------------------------------------
+        # Proportion of phase-run rows where food intolerance was recorded
+        prop_food_intolerance = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "TRUE",
+          target_cols = "food_intolerance",
+          ids         = id,
+          run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_food_intolerance = coalesce(prop_food_intolerance, 0),
+        
+      ) %>%
+      
+      # --- 4. Column Suffixing -----------------------------------------------
+    # Append _{phase} to every column in phase_cols, enabling collision-free
+    # multi-phase iteration when this function is called repeatedly.
+    # e.g. phase = "1" → nutri_treat_p1, prop_familymeals_p1, etc.
+    rename_with(
+      .fn   = ~ paste0(.x, "_p", tolower(phase)),
+      .cols = all_of(phase_cols)
+    )
+    
+    if(phase=="T"){
+      
+      phaseT_c659_cols <- c(
+        "prop_f100_freq_less",
+        "prop_f100_freq_more",
+        "prop_f100_qty_less",
+        "prop_f100_qty_more",
+        "prop_f100_adh_less",
+        "prop_f100_adh_more"
+      )
+      
+      df_enriched <- df_enriched %>%
+        mutate(
+          # --- F100 Frequency Validation -----------------------------------
+          # Proportion of phase-run rows where prescribed frequency < WHO target
+          prop_f100_freq_less = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "less",
+            target_cols = "f100_freq_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_freq_less = coalesce(prop_f100_freq_less, 0),
+          
+          # Proportion of phase-run rows where prescribed frequency > WHO target
+          prop_f100_freq_more = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "more",
+            target_cols = "f100_freq_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_freq_more = coalesce(prop_f100_freq_more, 0),
+          
+          # --- F100 Quantity Validation ------------------------------------
+          # Proportion of phase-run rows where prescribed quantity < WHO target
+          prop_f100_qty_less = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "less",
+            target_cols = "f100_qty_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_qty_less = coalesce(prop_f100_qty_less, 0),
+          
+          # Proportion of phase-run rows where prescribed quantity > WHO target
+          prop_f100_qty_more = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "more",
+            target_cols = "f100_qty_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_qty_more = coalesce(prop_f100_qty_more, 0),
+          
+          # --- F100 Adherence Validation -----------------------------------
+          # Proportion of phase-run rows where actual daily intake < WHO target
+          prop_f100_adh_less = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "less",
+            target_cols = "f100_adh_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_adh_less = coalesce(prop_f100_adh_less, 0),
+          
+          # Proportion of phase-run rows where actual daily intake > WHO target
+          prop_f100_adh_more = summarise_event(
+            df          = monitoring_df,
+            id_col      = "id",
+            phase_col   = "phase",
+            event       = "more",
+            target_cols = "f100_adh_validation",
+            ids         = id,
+            run_order   = run_idx,
+            type        = "proportion"
+          ),
+          prop_f100_adh_more = coalesce(prop_f100_adh_more, 0)
+          
+        ) %>%
+        
+        rename_with(
+          .fn   = ~ paste0(.x, "_p", tolower(phase)),
+          .cols = all_of(phaseT_c659_cols)
+        )
+      
+    }
+  }
+  
+  if(cohort == "under6"){
+    
+    # phaseT_under6_cols <- c(
+    #   "prop_f100d_freq_less",
+    #   "prop_f100d_freq_more",
+    #   "prop_f100d_qty_less",
+    #   "prop_f100d_qty_more",
+    #   "prop_f100d_adh_less",
+    #   "prop_f100d_adh_more"
+    # )
+    
+    df_enriched <- df_enriched %>%
+      
+      mutate(
+        
+        # --- Nutritional Treatment Series ------------------------------------
+        # Run-length encoded string of products given during run_idx phase run.
+        # RUTF attribute appended as "product+rutf" where present.
+        nutri_treat_series_under6 = get_matching_series_str(
+          df         = monitoring_df,
+          id_col     = "id",
+          target_col = "typeAlim",
+          ref_col    = "phase",
+          attr_col   = "rutf",
+          # run_order  = run_idx,
+          ids        = id
+        ),
+        
+        nutri_treat_under6 = generalize_nutri_treatement(nutri_treat_series_under6),
+        
+        # --- F100d Frequency Validation -----------------------------------
+        # Proportion of phase-run rows where prescribed frequency < WHO target
+        prop_f100d_freq_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f100d_freq_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_freq_less = coalesce(prop_f100d_freq_less, 0),
+        
+        # Proportion of phase-run rows where prescribed frequency > WHO target
+        prop_f100d_freq_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f100d_freq_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_freq_more = coalesce(prop_f100d_freq_more, 0),
+        
+        # --- F100d Quantity Validation ------------------------------------
+        # Proportion of phase-run rows where prescribed quantity < WHO target
+        prop_f100d_qty_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f100d_qty_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_qty_less = coalesce(prop_f100d_qty_less, 0),
+        
+        # Proportion of phase-run rows where prescribed quantity > WHO target
+        prop_f100d_qty_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f100d_qty_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_qty_more = coalesce(prop_f100d_qty_more, 0),
+        
+        # --- F100d Adherence Validation -----------------------------------
+        # Proportion of phase-run rows where actual daily intake < WHO target
+        prop_f100d_adh_less = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "less",
+          target_cols = "f100d_adh_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_adh_less = coalesce(prop_f100d_adh_less, 0),
+        
+        # Proportion of phase-run rows where actual daily intake > WHO target
+        prop_f100d_adh_more = summarise_event(
+          df          = monitoring_df,
+          id_col      = "id",
+          phase_col   = "phase",
+          event       = "more",
+          target_cols = "f100d_adh_validation",
+          ids         = id,
+          # run_order   = run_idx,
+          type        = "proportion"
+        ),
+        prop_f100d_adh_more = coalesce(prop_f100d_adh_more, 0)
+        
+      )
+      
+      # rename_with(
+      #   .fn   = ~ paste0(.x, "_p", tolower(phase)),
+      #   .cols = all_of(phaseT_under6_cols)
+      # )
+  }
   
   return(df_enriched)
 }

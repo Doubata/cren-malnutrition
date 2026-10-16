@@ -17,11 +17,9 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
   # Project & workflow management
   here,       # reproducible file paths within an R project
+  fs,
   devtools,
   usethis,    # tools to automate setup and management of R projects and packages
-  
-  # Data import
-  readr,      # fast import of rectangular data (CSV, TSV)
   
   # Data manipulation & analysis
   tidyverse,  # data manipulation, transformation, and visualization
@@ -32,9 +30,6 @@ pacman::p_load(
   # Data cleaning & metadata
   janitor,    # clean column names and simple data cleaning helpers
   labelled,   # manage labelled variables (useful for surveys and statistical data)
-  
-  # Functional programming / iteration
-  purrr,      # tools for iteration (map, map_df, etc.)
   
   # Data validation & robustness
   checkmate,  # fast argument checking for functions
@@ -55,38 +50,14 @@ pacman::p_load(
   renv
 )
 
-# --- 2. Source Custom Functions from /R/functions folder --------------------------------
-path_to_functions <- list("R/functions/utils/",
-                          "R/functions/import/",
-                          "R/functions/cleaning/",
-                          "R/functions/validation/",
-                          "R/functions/transform/",
-                          "R/functions/indicators/")
-
-for (p in path_to_functions) {
-  if (dir.exists(p)) {
-    
-    # Get list of R files
-    function_files <- list.files(p, pattern = "\\.[Rr]$", full.names = TRUE)
-    
-    # Source each file into the Global Environment
-    # Using local = FALSE or local = globalenv() ensures functions are actually accessible
-    invisible(lapply(function_files, source, local = FALSE))
-    
-    cli::cli_alert_success("Sourced {length(function_files)} function(s) files from {p}")
-    
-    
-  } else {
-    cli::cli_alert_danger("Error: '{p}' directory not found!")
-  }
-  
-}
-
 # --- 3. Global options --------------------------------------------------------
 options(
   scipen = 999,                  # avoid scientific notation
   dplyr.summarise.inform = FALSE # suppress messages from dplyr::summarise()
 )
 
-# library(gtsummary)
-# library(labelled)
+
+# source(here::here("scripts", "00_import_data.R"))
+# source(here::here("R", "config.R"))
+
+

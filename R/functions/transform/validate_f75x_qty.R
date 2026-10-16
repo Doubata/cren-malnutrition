@@ -2,14 +2,14 @@
 #' Validate F75 Prescribed Quantity Against WHO Recommendations
 #'
 #' @description
-#' For each row in \code{df}, computes the patient's prescribed daily intake
+#' For each row in \code{data}, computes the patient's prescribed daily intake
 #' as \code{freq_col × qty_col} and compares it against the WHO F75 recommended
 #' daily range derived from the patient's weight. Returns a categorical label
 #' per row: \code{"within"}, \code{"more"}, or \code{"less"}. Patients with
-#' severe oedema (grade ≥ 3) are routed to \code{f75_oed3_lkp_df}; all
-#' others use \code{f75_lkp_df}.
+#' severe oedema (grade ≥ 3) are routed to \code{who_f75_oed3_data}; all
+#' others use \code{who_f75_data}.
 #'
-#' @param df                 A data frame containing patient-level data.
+#' @param data                 A data frame containing patient-level data.
 #' @param weight_col         Column name (quoted or unquoted) for patient weight in kg.
 #' @param food_col           Column name (quoted or unquoted) for the food type given.
 #' @param oedema_col         Column name (quoted or unquoted) for oedema grade
@@ -23,14 +23,14 @@
 #'                           Defaults to \code{c("F75", "F75F")}. Rows whose
 #'                           \code{food_col} is not in \code{type_food} are
 #'                           left as \code{NA}.
-#' @param f75_lkp_df      WHO F75 lookup table for non-severe oedema patients.
+#' @param who_f75_data      WHO F75 lookup table for non-severe oedema patients.
 #'                           Must contain columns \code{who_weight_col},
 #'                           \code{ml_per_day}, and \code{min_ml_per_day}.
-#' @param f75_oed3_lkp_df WHO F75 lookup table for severe oedema (grade ≥ 3)
-#'                           patients. Same column structure as \code{f75_lkp_df}.
+#' @param who_f75_oed3_data WHO F75 lookup table for severe oedema (grade ≥ 3)
+#'                           patients. Same column structure as \code{who_f75_data}.
 #'
 #' @return
-#' An unnamed character vector the same length as \code{nrow(df)}, with values:
+#' An unnamed character vector the same length as \code{nrow(data)}, with values:
 #' \itemize{
 #'   \item \code{"within"} — prescribed daily intake is within the WHO range.
 #'   \item \code{"more"}   — prescribed daily intake exceeds the WHO maximum.
@@ -67,12 +67,12 @@
 #'
 #' @examples
 #' validate_f75x_qty(
-#'   df,
+#'   data,
 #'   weight_col = "weight_kg", food_col   = "food_type",
 #'   oedema_col = "oedema_grade", freq_col = "freq_prescribed",
 #'   qty_col    = "qty_prescribed",
-#'   f75_lkp_df      = who_f75,
-#'   f75_oed3_lkp_df = who_f75_oed3
+#'   who_f75_data      = who_f75,
+#'   who_f75_oed3_data = who_f75_oed3
 #' )
 #' #> [1] "within" "less" "more" NA ...
 #'
@@ -81,10 +81,10 @@
 #' \code{.check_validate_f75x_qty_args()}, \code{.lookup_who_idx()}
 #'
 #' @export
-validate_f75x_qty <- function(df, weight_col, food_col, oedema_col,
+validate_f75x_qty <- function(data, weight_col, food_col, oedema_col,
                               freq_col, qty_col, ...,
                               type_food = c("F75", "F75F"),
-                              f75_lkp_df, f75_oed3_lkp_df) {
+                              who_f75_data, who_f75_oed3_data) {
   
   # --- 1. Symbol Capture ---------------------------------------------------
   # Allows callers to pass bare column names (unquoted) or quoted strings.
@@ -95,19 +95,19 @@ validate_f75x_qty <- function(df, weight_col, food_col, oedema_col,
   if (is.symbol(substitute(qty_col)))    qty_col    <- deparse(substitute(qty_col))
   
   # --- 2. Validation -------------------------------------------------------
-  .check_validate_f75x_qty_args(df, weight_col, food_col, oedema_col,
+  .check_validate_f75x_qty_args(data, weight_col, food_col, oedema_col,
                                 freq_col, qty_col, type_food)
   
   # --- 3. Vector Extraction ------------------------------------------------
   # Pre-extract columns for performance
-  weight  <- df[[weight_col]]
-  food    <- df[[food_col]]
-  oedema  <- df[[oedema_col]]
-  freq    <- df[[freq_col]]
-  qty     <- df[[qty_col]]
+  weight  <- data[[weight_col]]
+  food    <- data[[food_col]]
+  oedema  <- data[[oedema_col]]
+  freq    <- data[[freq_col]]
+  qty     <- data[[qty_col]]
   
   # --- 4. Initialisation ---------------------------------------------------
-  results <- rep(NA_character_, nrow(df))
+  results <- rep(NA_character_, nrow(data))
   
   # --- 5. Food Filter ------------------------------------------------------
   # Only process rows with a recognised F75 food type
@@ -121,18 +121,18 @@ validate_f75x_qty <- function(df, weight_col, food_col, oedema_col,
   moderate_oedema   <- valid_food & !severe
   
   # --- 7. Internal Categorisation Helper -----------------------------------
-  process_group <- function(mask, lkp_df) {
+  process_group <- function(mask, lkp_data) {
     if (length(mask) == 0) return(character(0))
     
     idx <- which(mask)
     
     # Map patient weights to the ceiling row in the lookup table
-    w_idx <- .lookup_who_idx(weight[idx], lkp_df[["weight_kg"]])
+    w_idx <- .lookup_who_idx(weight[idx], lkp_data[["weight_kg"]])
     
     # Build a [n × 2] limit matrix: max and min recommended daily ml
     limit_matrix <- cbind(
-      max = lkp_df[["ml_per_day"]][w_idx],
-      min = lkp_df[["min_ml_per_day"]][w_idx]
+      max = lkp_data[["ml_per_day"]][w_idx],
+      min = lkp_data[["min_ml_per_day"]][w_idx]
     )
     
     # Prescribed daily intake = frequency × quantity per feed
@@ -151,9 +151,9 @@ validate_f75x_qty <- function(df, weight_col, food_col, oedema_col,
   
   # --- 8. Assign Results ---------------------------------------------------
   if (length(moderate_oedema) > 0)
-    results[moderate_oedema] <- process_group(moderate_oedema, f75_lkp_df)
+    results[moderate_oedema] <- process_group(moderate_oedema, who_f75_data)
   if (length(severe_oedema) > 0)
-    results[severe_oedema]   <- process_group(severe_oedema,   f75_oed3_lkp_df)
+    results[severe_oedema]   <- process_group(severe_oedema,   who_f75_oed3_data)
   
   return(results)
 }

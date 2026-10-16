@@ -2,15 +2,15 @@
 #' Validate F75 Feeding Adherence Against WHO Recommendations
 #'
 #' @description
-#' For each row in \code{df}, computes the patient's actual daily intake by
+#' For each row in \code{data}, computes the patient's actual daily intake by
 #' aggregating meal-level quantities, then compares it against the WHO F75
 #' recommended daily range derived from the patient's weight. Returns a
 #' categorical adherence label per row: \code{"within"}, \code{"more"}, or
 #' \code{"less"}. Patients with severe oedema (grade ≥ 3) are routed to a
-#' dedicated lookup table (\code{f75_oed3_lkp_df}); all others use the
-#' standard table (\code{f75_lkp_df}).
+#' dedicated lookup table (\code{who_f75_oed3_data}); all others use the
+#' standard table (\code{who_f75_data}).
 #'
-#' @param df                 A data frame containing patient-level data.
+#' @param data                 A data frame containing patient-level data.
 #' @param weight_col         Column name (quoted or unquoted) for patient weight in kg.
 #' @param food_col           Column name (quoted or unquoted) for the food type given.
 #' @param oedema_col         Column name (quoted or unquoted) for oedema grade
@@ -25,14 +25,14 @@
 #'                           Defaults to \code{c("F75", "F75F")}. Rows whose
 #'                           \code{food_col} value is not in \code{type_food}
 #'                           are left as \code{NA}.
-#' @param f75_lkp_df         WHO F75 lookup table for non-severe oedema patients.
+#' @param who_f75_data         WHO F75 lookup table for non-severe oedema patients.
 #'                           Must contain columns \code{weight_kg},
 #'                           \code{ml_per_day}, and \code{min_ml_per_day}.
-#' @param f75_oed3_lkp_df    WHO F75 lookup table for severe oedema (grade ≥ 3)
-#'                           patients. Same column structure as \code{f75_lkp_df}.
+#' @param who_f75_oed3_data    WHO F75 lookup table for severe oedema (grade ≥ 3)
+#'                           patients. Same column structure as \code{who_f75_data}.
 #'
 #' @return
-#' An unnamed character vector the same length as \code{nrow(df)}, with values:
+#' An unnamed character vector the same length as \code{nrow(data)}, with values:
 #' \itemize{
 #'   \item \code{"within"} — daily intake is within the WHO recommended range.
 #'   \item \code{"more"}   — daily intake exceeds the WHO maximum.
@@ -66,15 +66,15 @@
 #' }
 #'
 #' @examples
-#' # Classify adherence for all patients in df
+#' # Classify adherence for all patients in data
 #' validate_f75x_adh(
-#'   df,
+#'   data,
 #'   weight_col = "weight_kg", food_col = "food_type",
 #'   oedema_col = "oedema_grade",
 #'   qty_col    = "qty_prescribed",
 #'   meal_cols  = c("meal_1", "meal_2", "meal_3"),
-#'   f75_lkp_df      = who_f75,
-#'   f75_oed3_lkp_df = who_f75_oed3
+#'   who_f75_data      = who_f75,
+#'   who_f75_oed3_data = who_f75_oed3
 #' )
 #' #> [1] "within" "less" "more" NA ...
 #'
@@ -83,10 +83,10 @@
 #' \code{.get_daily_intake_batch()}, \code{.lookup_who_idx()}
 #'
 #' @export
-validate_f75x_adh <- function(df, weight_col, food_col, oedema_col,
+validate_f75x_adh <- function(data, weight_col, food_col, oedema_col,
                               qty_col, meal_cols, ...,
                               type_food = c("F75", "F75F"),
-                              f75_lkp_df, f75_oed3_lkp_df) {
+                              who_f75_data, who_f75_oed3_data) {
   
   # --- 1. Symbol Capture ---------------------------------------------------
   # Allows callers to pass bare column names (unquoted) or quoted strings.
@@ -96,17 +96,17 @@ validate_f75x_adh <- function(df, weight_col, food_col, oedema_col,
   if (is.symbol(substitute(qty_col)))    qty_col    <- deparse(substitute(qty_col))
   
   # --- 2. Validation -------------------------------------------------------
-  .check_validate_f75x_adh_args(df, weight_col, food_col, oedema_col, qty_col, meal_cols, type_food)
+  .check_validate_f75x_adh_args(data, weight_col, food_col, oedema_col, qty_col, meal_cols, type_food)
   
   # --- 3. Vector Extraction ------------------------------------------------
   # Pre-extract columns for performance
-  weight  <- df[[weight_col]]
-  food    <- df[[food_col]]
-  oedema  <- df[[oedema_col]]
-  qty     <- df[[qty_col]]
+  weight  <- data[[weight_col]]
+  food    <- data[[food_col]]
+  oedema  <- data[[oedema_col]]
+  qty     <- data[[qty_col]]
   
   # --- 4. Initialisation ---------------------------------------------------
-  results <- rep(NA_character_, nrow(df))
+  results <- rep(NA_character_, nrow(data))
   
   # --- 5. Food Filter ------------------------------------------------------
   # Only process rows with a recognised F75 food type
@@ -120,13 +120,13 @@ validate_f75x_adh <- function(df, weight_col, food_col, oedema_col,
   severe_oedema   <- valid_food &  severe
   
   # --- 7. Internal Adherence Helper ----------------------------------------
-  process_group <- function(mask, lkp_df) {
+  process_group <- function(mask, lkp_data) {
     if (length(mask) == 0) return(NULL)
     
     idx <- which(mask)
     
     # Coerce meal columns to character to prevent factor level mismatches
-    intake_matrix <- df[idx, meal_cols, drop = FALSE]
+    intake_matrix <- data[idx, meal_cols, drop = FALSE]
     intake_matrix <- sapply(intake_matrix, as.character)
     if (!is.matrix(intake_matrix))
       intake_matrix <- matrix(intake_matrix, nrow = length(idx))
@@ -135,15 +135,15 @@ validate_f75x_adh <- function(df, weight_col, food_col, oedema_col,
     daily_intakes <- .get_daily_intake_batch(qty[idx], intake_matrix)
     
     # Map patient weights to the ceiling row in the lookup table
-    w_idx   <- .lookup_who_idx(weight[idx], lkp_df[["weight_kg"]])
+    w_idx   <- .lookup_who_idx(weight[idx], lkp_data[["weight_kg"]])
     valid_w <- !is.na(w_idx)   # rows with out-of-range weights are left NA
     
     res <- rep(NA_character_, length(idx))
     
     if (any(valid_w)) {
       curr_intakes <- daily_intakes[valid_w]
-      curr_max     <- lkp_df[["ml_per_day"]][w_idx[valid_w]]
-      curr_min     <- lkp_df[["min_ml_per_day"]][w_idx[valid_w]]
+      curr_max     <- lkp_data[["ml_per_day"]][w_idx[valid_w]]
+      curr_min     <- lkp_data[["min_ml_per_day"]][w_idx[valid_w]]
       
       # Default to "within", then override at the boundaries
       sub_res <- rep("within", length(curr_intakes))
@@ -157,9 +157,9 @@ validate_f75x_adh <- function(df, weight_col, food_col, oedema_col,
   
   # --- 8. Assign Results ---------------------------------------------------
   if (length(moderate_oedema) > 0)
-    results[moderate_oedema] <- process_group(moderate_oedema, f75_lkp_df)
+    results[moderate_oedema] <- process_group(moderate_oedema, who_f75_data)
   if (length(severe_oedema) > 0)
-    results[severe_oedema]   <- process_group(severe_oedema,   f75_oed3_lkp_df)
+    results[severe_oedema]   <- process_group(severe_oedema,   who_f75_oed3_data)
   
   return(results)
 }

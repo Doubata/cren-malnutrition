@@ -1,0 +1,141 @@
+---
+title: Analysis of Factors Associated with Poor Response to Nutritional Treatment
+  in Severely Malnourished Children Aged 6–59 Months With Edema and With Complications Treated (Phase 1).
+author: "Doubata Dramane Marius COULIBALY"
+date: '`r Sys.Date()`'
+output:
+  html_document: default
+  pdf_document:
+    extra_dependencies: ["pdflscape", "makecell", "booktabs"]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.width = 6.5,
+  out.width = "100%"
+)
+library(targets)
+library(gtsummary)
+library(flextable)
+# library(kableExtra)
+# library(booktabs)
+set_flextable_defaults(fonts_ignore = TRUE)
+targets::tar_load(
+  c(p1_summary_table_c659_edema, domain_registry, subgroup_registry, p1_catalog_c659_edema, p1_univariate_table_c659_edema, p1_glm_final_table_c659_edema)
+)
+```
+
+## 1. Methodology
+
+Descriptive analyses were conducted to characterize the cohort and the non-response to the nutritional treatment. Continuous variables were summarized using medians and interquartile ranges (25^th^ - 75^th^ percentile) due to their non-normal distribution, whereas categorical variables were summarized as counts and percentages (%).
+
+Differences between groups (success and failure) were assessed using the Wilcoxon rank-sum test or Kruskal–Wallis test for continuous variables and Pearson's chi-square or Fisher's exact test for categorical variables, as appropriate.
+
+Univariable logistic regression analyses were performed to estimate crude associations between independent variables and the dependent variable. Variables considered clinically relevant or statistically associated with the non-response to the nutritional treatment at *p* \< 0.20 were included in a multivariable logistic regression.
+
+Prior to model building, pairwise correlations among independent variables were examined to identify highly correlated predictors and assess potential multicollinearity. Pearson correlation coefficients were computed for continuous variables (or Spearman's rank correlations for non-normally distributed variables). Variables exhibiting strong correlations (\|r\| $\geq 0.70$) were carefully evaluated to avoid redundancy. Variance Inflation Factors (VIFs) were subsequently calculated in the multivariable model, with VIF values \> 5 indicating potential multicolliniarity.
+
+Model selection was guided by likelihood ratio tests and the principle of parsimony. A stepwise selection procedure was used to identify the most parsimonious model (based on the Akaike Information Criterion (AIC)) by retaining variables that improved model fit while excluding predictors that contributed little additional information.
+
+Adjusted odds ratios (aORs) with 95% confidence intervals (CIs) were reported. Statistical significance in the final model was defined as a two-sided *p* \< 0.05. A variable was significantly associated with the risk of nutritional treatment failure if: i) the odds ratio (OR) was \> 1 with a lower limit of the confidence interval (CI) \> 1; or ii) OR\<1 with upper CI limit \<1; and p-value was \<0.05.
+
+All analyses were conducted using R (version 4.3.0).
+
+\newpage
+
+## 2. Study population
+
+Insert comments here.
+
+## 3. **Descriptive Characteristics**
+
+Insert comments here.
+
+### 4. **Bivariate Analysis**
+
+Table 1: Association between explanatory variables and outcome at phase 1.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_summary_table_c659_edema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  # keep_with_next(i = label_rows, part = "body") |>
+  flextable::fontsize(size = 8.5, part = "all") |>
+  flextable::width(j = 1, width = 2.5) |>      # Characteristic (long labels)
+  flextable::width(j = 2:4, width = 0.85) |>   # FALSE / TRUE / Overall
+  flextable::width(j = 5:6, width = 0.55)      # p-value / q-value
+```
+
+\newpage
+
+```{r p1-domain-report, results = 'asis', echo=FALSE}
+domain_registry_sub <- domain_registry[domain_registry$domain != "outcome", ]
+domain_labels   <- domain_label_lookup(domain_registry_sub) # named vector: key -> label
+subgroup_labels <- subgroup_label_lookup(subgroup_registry)
+
+for (d in domain_display_order(domain_registry_sub)) {
+  cat("\n\n### ", domain_labels[[d]], "\n\n")
+  
+  subgroups <- subgroup_display_order(subgroup_registry, domain = d)
+  
+  if (length(subgroups) == 0) {
+    plots <- pull_plots(p1_catalog_c659_edema, domain = d)
+    render_plot_grid(plots, ncol = 3, id = paste0("c659_edema_p1_", d))
+  } else {
+    for (sg in subgroups) {
+      plots <- pull_plots(p1_catalog_c659_edema, domain = d, subgroup = sg)
+      if (length(plots) > 0) {
+        cat("\n\n#### ", subgroup_labels[[sg]], "\n\n")
+        render_plot_grid(plots, ncol = 3, id = paste0("c659_edema_p1_", d, "_", sg))
+      }
+    }
+  }
+}
+```
+
+
+Insert comments here.
+
+\newpage
+
+**Table 2:** Results of the univariate logistic regression analysis between explanatory variables and outcome.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_univariate_table_c659_edema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  # keep_with_next(i = label_rows, part = "body") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::width(j = 1, width = 2.5)
+```
+
+Insert comments here.
+
+\newpage
+
+# 5. Multivariate logistic regression analyses
+
+Table 3 : Results of the generalize logistic regression analysis at Phase 1.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_glm_final_table_c659_edema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  flextable::compose(
+    j = "estimate",  # check actual column key name below if this errors
+    value = as_paragraph(
+      ifelse(stringr::str_detect(estimate, "^NA"), 
+             stringr::str_remove(estimate, "^NA"), 
+             estimate)
+    ),
+    part = "body"
+  ) |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::width(j = 1, width = 1.6) |>      # Characteristic (long labels)
+  flextable::width(j = 2:4, width = 0.40) |>   # FALSE / TRUE / Overall
+  flextable::width(j = 5, width = 0.80) |>     # FALSE / TRUE / Overall
+  flextable::width(j = 6:8, width = 0.50)     # p-value / q-value / GVIF
+```
+
+Insert comments here.

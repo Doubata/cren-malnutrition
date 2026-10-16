@@ -1,0 +1,1070 @@
+# =============================================================================
+# MASTER VARIABLE REGISTRY
+# =============================================================================
+#
+# STRUCTURE OVERVIEW
+# ──────────────────
+# outcomes    : one entry per phase; each iteration references one outcome key
+# iterations  : named analytical snapshots; each declares its outcome, phase,
+#               and any variable-level changes (type overrides, demotions…)
+# domains     : thematic groups with optional sub-groups; control display order
+# variables   : canonical registry — every variable defined ONCE with all metadata
+#
+# KEY CONVENTIONS
+# ───────────────
+# phases      : character — "1" or "T" (not integers)
+# include     : false  → variable inactive at baseline; activated by an iteration
+# roles       : analytical role per phase — predictor | confounder |
+#               effect_modifier | descriptor | excluded
+# changes     : delta list inside an iteration — only what differs from the
+#               previous state; everything else is inherited unchanged
+# based_on    : parent iteration key; null for the root (baseline)
+#
+# HOW ITERATIONS CHAIN
+# ─────────────────────
+# baseline (root)
+#   └── baseline_phase_1   (adds phase "1" scope)
+#         ├── univariate_phase_1   (same vars, univariate role)
+#         └── multivariate_phase_1 (same vars, multivariate role)
+#   └── baseline_phase_T   (adds phase "T" scope)
+#         ├── univariate_phase_T
+#         └── multivariate_phase_T
+# =============================================================================
+
+
+# =============================================================================
+# OUTCOMES — one entry per phase
+# Each iteration references one outcome key via `outcome_ref`
+# =============================================================================
+outcomes:
+
+  phase_1:
+    name:  has_failed_p1
+    label: "Non-response to treatment in Phase 1"
+    type:  binary
+
+  phase_T:
+    name:  has_failed_pt
+    label: "Non-response to treatment in Phase T"
+    type:  binary
+
+
+# =============================================================================
+# ITERATIONS
+# =============================================================================
+# Each iteration is a named analytical snapshot.
+# Fields:
+#   label        : human-readable name shown in reports
+#   description  : rationale / what changed and why
+#   based_on     : parent iteration key (null for root)
+#   outcome_ref  : key into `outcomes` block (null if iteration has no outcome)
+#   phase        : "1", "T", or null (cross-phase / no phase scope)
+#   changes      : list of variable-level deltas vs. parent state
+#                  action: promote  → activate variable in this iteration
+#                          demote   → deactivate variable in this iteration
+#                          retype   → override type without changing include/role
+# =============================================================================
+iterations:
+
+  # ── Root snapshot: all variables as collected, no phase scope ──────────────
+  baseline:
+    label:       "Baseline — raw variables, no phase scope"
+    description: >
+      Initial registry of all collected variables at face value.
+      No phase assigned. Serves as the root state all other iterations inherit.
+    based_on:    null
+    outcome_ref: null
+    phase:       null
+    changes:     []
+
+  # ── Phase 1 snapshots ──────────────────────────────────────────────────────
+  baseline_phase_1:
+    label:       "Baseline — Phase 1"
+    description: >
+      Descriptive analysis of Phase 1 variables in their original form.
+      Proportional feeding compliance variables still treated as numerical.
+    based_on:    baseline
+    outcome_ref: phase_1
+    phase:       "1"
+    changes:     []
+
+  univariate_phase_1:
+    label:       "Univariate analysis — Phase 1"
+    description: >
+      Feeding compliance proportion variables recoded as categorical
+      for univariate logistic regression (binary: above/below threshold).
+    based_on:    baseline_phase_1
+    outcome_ref: phase_1
+    phase:       "1"
+    changes:
+      # Recode: proportion variables → categorical for modelling
+      - variable: prop_f75x_freq_less_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_freq_more_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_qty_less_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_qty_more_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_adh_less_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_adh_more_p1
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+
+  multivariate_phase_1:
+    label:       "Multivariate analysis — Phase 1"
+    description: >
+      Same recoding as univariate. Variables selected for the adjusted model
+      based on univariate p < 0.20 criterion.
+    based_on:    univariate_phase_1
+    outcome_ref: phase_1
+    phase:       "1"
+    changes:
+      # f75_to_f75f excluded: too sparse for adjusted model
+      - variable: f75_to_f75f
+        action:   demote
+        reason:   "Sparse cell counts; excluded from multivariate model"
+
+  # ── Phase T snapshots ──────────────────────────────────────────────────────
+  baseline_phase_T:
+    label:       "Baseline — Phase T"
+    description: >
+      Descriptive analysis for Phase T variables. Note: feeding compliance
+      variables for Phase T are not yet collected; they are inactive.
+    based_on:    baseline
+    outcome_ref: phase_T
+    phase:       "T"
+    changes:     []
+
+  univariate_phase_T:
+    label:       "Univariate analysis — Phase T"
+    description: >
+      Phase T univariate analysis. Compliance variables for Phase T
+      recoded to categorical once data are available.
+    based_on:    baseline_phase_T
+    outcome_ref: phase_T
+    phase:       "T"
+    changes:
+      - variable: prop_f75x_freq_less_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_freq_more_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_qty_less_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_qty_more_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_adh_less_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+      - variable: prop_f75x_adh_more_pt
+        action:   retype
+        new_type: categorical
+        reason:   "Dichotomised at compliance threshold for univariate analysis"
+
+  multivariate_phase_T:
+    label:       "Multivariate analysis — Phase T"
+    description: >
+      Adjusted model for Phase T. Variables retained from univariate step.
+    based_on:    univariate_phase_T
+    outcome_ref: phase_T
+    phase:       "T"
+    changes:     []
+
+
+# =============================================================================
+# DOMAINS
+# =============================================================================
+# Each domain has an optional `subgroups` block for finer display grouping
+# (e.g. Morbidity → General / Infections / Malaria / Anaemia).
+# `order` controls domain position within each iteration.
+# A domain absent from an iteration's order is not displayed in that iteration.
+# =============================================================================
+domains:
+
+  sociodemographic:
+    label: "Sociodemographic Characteristics"
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+      baseline_phase_T:    1
+      univariate_phase_T:  1
+      multivariate_phase_T: 1
+
+  clinical_admission:
+    label: "Clinical Admission & Severity"
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+      baseline_phase_T:    2
+      univariate_phase_T:  2
+      multivariate_phase_T: 2
+
+  nutritional_treatment:
+    label: "Nutritional Treatment"
+    order:
+      baseline:            3
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+
+  feeding_compliance:
+    label: "Feeding Compliance — F75 Protocol"
+    order:
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+      baseline_phase_T:    3
+      univariate_phase_T:  3
+      multivariate_phase_T: 3
+
+  morbidity:
+    label: "Morbidity & Comorbidities"
+    # Sub-groups control display order within the domain.
+    # Variables reference their subgroup via `subgroup` field.
+    subgroups:
+      general:    { label: "General",                order: 1 }
+      infections: { label: "Infections & Parasitic", order: 2 }
+      malaria:    { label: "Malaria",                order: 3 }
+      anaemia:    { label: "Anaemia",                order: 4 }
+    order:
+      baseline:            4
+      baseline_phase_1:    5
+      univariate_phase_1:  5
+      multivariate_phase_1: 5
+      baseline_phase_T:    4
+      univariate_phase_T:  4
+      multivariate_phase_T: 4
+
+
+# =============================================================================
+# VARIABLES — canonical registry
+# =============================================================================
+# Each variable is defined ONCE. Iteration-specific behaviour is handled via
+# the `iterations` block above (changes) — not here.
+#
+# Fields:
+#   name        : R column name (snake_case)
+#   label       : short display label for tables / plots
+#   description : longer methodological description for the data dictionary
+#   type        : base type — categorical | numerical
+#                 (can be overridden per iteration via `retype` action)
+#   domain      : references a key in `domains`
+#   subgroup    : optional — references a key in domain.subgroups
+#   phases      : list of phases this variable belongs to — "1", "T", or both
+#   order       : display position within its domain, per iteration
+#   analysis:
+#     include   : false = inactive in baseline; activated by an iteration change
+#     roles     : analytical role per iteration key
+#                 predictor | confounder | effect_modifier | descriptor | excluded
+# =============================================================================
+variables:
+
+  # ── SOCIODEMOGRAPHIC ────────────────────────────────────────────────────────
+
+  - name:        age
+    label:       "Age (Month)"
+    description: "Patient age at admission"
+    type:        numerical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:         1
+      baseline_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:         descriptor
+        baseline_phase_1: descriptor
+
+  - name:        age_group
+    label:       "Age group"
+    description: "Patient age category at admission"
+    type:        categorical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        sexe
+    label:       "Sex"
+    description: "Patient biological sex"
+    type:        categorical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        locality
+    label:       "Locality"
+    description: "Geographic origin of the patient"
+    type:        categorical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:            3
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        vaccAJ
+    label:       "Vaccination status"
+    description: "Up-to-date vaccination record at admission"
+    type:        categorical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:            4
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        is_breastfed
+    label:       "Breastfeeding status"
+    description: "Whether child is currently breastfed"
+    type:        categorical
+    domain:      sociodemographic
+    phases:      ["1"]
+    order:
+      baseline:            5
+      baseline_phase_1:    5
+      univariate_phase_1:  5
+      multivariate_phase_1: 5
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # ── CLINICAL ADMISSION & SEVERITY ───────────────────────────────────────────
+
+  - name:        tAdm
+    label:       "Type admission"
+    description: "Type admission"
+    type:        categorical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        edema_incident
+    label:       "Incident edema"
+    description: "New or worsening edema during phase"
+    type:        categorical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_whz_error_p1
+    label:       "WHZ error proportion (P1)"
+    description: "Proportion of WHZ measurement errors in Phase 1"
+    type:        numerical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      # Not collected at baseline; activated from baseline_phase_1 onwards
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        length_tubefeeding
+    label:       "Tube feeding duration"
+    description: "Number of days on nasogastric tube feeding"
+    type:        numerical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline:            3
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        phase_length
+    label:       "Phase length"
+    description: "Duration of the treatment phase (days)"
+    type:        numerical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    5
+      univariate_phase_1:  5
+      multivariate_phase_1: 5
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        is_death_in_phase
+    label:       "Death in phase"
+    description: "Mortality event occurring during the study phase"
+    type:        categorical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    6
+      univariate_phase_1:  6
+      multivariate_phase_1: 6
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        death_day1_P1
+    label:       "Death on day 1 (P1)"
+    description: "Death occurring on the first day of Phase 1"
+    type:        categorical
+    domain:      clinical_admission
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    7
+      univariate_phase_1:  7
+      multivariate_phase_1: 7
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # ── NUTRITIONAL TREATMENT ───────────────────────────────────────────────────
+
+  - name:        nutri_treat_p1
+    label:       "Nutritional treatment (P1)"
+    description: "Type of nutritional treatment assigned in Phase 1"
+    type:        categorical
+    domain:      nutritional_treatment
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        f75_to_f75f
+    label:       "F75 to F75F transition"
+    description: "Transition between F75 formula variants"
+    type:        categorical
+    domain:      nutritional_treatment
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      # Absent from multivariate_phase_1: demoted via iteration change
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:   descriptor
+        univariate_phase_1: predictor
+
+  - name:        prop_familymeals_p1
+    label:       "Family meals proportion (P1)"
+    description: "Proportion of meals taken as family meals in Phase 1"
+    type:        numerical
+    domain:      nutritional_treatment
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_food_intolerance_p1
+    label:       "Food intolerance proportion (P1)"
+    description: "Proportion of feeds with recorded intolerance in Phase 1"
+    type:        numerical
+    domain:      nutritional_treatment
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # ── FEEDING COMPLIANCE — F75 PROTOCOL ──────────────────────────────────────
+  # Phase 1 compliance variables
+  # Base type: numerical (proportions); retyped → categorical in univariate+
+
+  - name:        prop_f75x_freq_less_p1
+    label:       "F75 frequency below target (P1)"
+    description: "Proportion of feeds given less frequently than prescribed"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_f75x_freq_more_p1
+    label:       "F75 frequency above target (P1)"
+    description: "Proportion of feeds given more frequently than prescribed"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_f75x_qty_less_p1
+    label:       "F75 quantity below target (P1)"
+    description: "Proportion of feeds with volume below prescription"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_f75x_qty_more_p1
+    label:       "F75 quantity above target (P1)"
+    description: "Proportion of feeds with volume above prescription"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_f75x_adh_less_p1
+    label:       "F75 adherence below target (P1)"
+    description: "Proportion of feeds with overall adherence below target"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    5
+      univariate_phase_1:  5
+      multivariate_phase_1: 5
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        prop_f75x_adh_more_p1
+    label:       "F75 adherence above target (P1)"
+    description: "Proportion of feeds with overall adherence above target"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["1"]
+    order:
+      baseline_phase_1:    6
+      univariate_phase_1:  6
+      multivariate_phase_1: 6
+    analysis:
+      include: false
+      roles:
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # Phase T compliance variables — same structure, inactive until Phase T data available
+
+  - name:        prop_f75x_freq_less_pt
+    label:       "F75 frequency below target (PT)"
+    description: "Proportion of feeds given less frequently than prescribed"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    1
+      univariate_phase_T:  1
+      multivariate_phase_T: 1
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  - name:        prop_f75x_freq_more_pt
+    label:       "F75 frequency above target (PT)"
+    description: "Proportion of feeds given more frequently than prescribed"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    2
+      univariate_phase_T:  2
+      multivariate_phase_T: 2
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  - name:        prop_f75x_qty_less_pt
+    label:       "F75 quantity below target (PT)"
+    description: "Proportion of feeds with volume below prescription"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    3
+      univariate_phase_T:  3
+      multivariate_phase_T: 3
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  - name:        prop_f75x_qty_more_pt
+    label:       "F75 quantity above target (PT)"
+    description: "Proportion of feeds with volume above prescription"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    4
+      univariate_phase_T:  4
+      multivariate_phase_T: 4
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  - name:        prop_f75x_adh_less_pt
+    label:       "F75 adherence below target (PT)"
+    description: "Proportion of feeds with overall adherence below target"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    5
+      univariate_phase_T:  5
+      multivariate_phase_T: 5
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  - name:        prop_f75x_adh_more_pt
+    label:       "F75 adherence above target (PT)"
+    description: "Proportion of feeds with overall adherence above target"
+    type:        numerical
+    domain:      feeding_compliance
+    phases:      ["T"]
+    order:
+      baseline_phase_T:    6
+      univariate_phase_T:  6
+      multivariate_phase_T: 6
+    analysis:
+      include: false
+      roles:
+        baseline_phase_T:     descriptor
+        univariate_phase_T:   predictor
+        multivariate_phase_T: predictor
+
+  # ── MORBIDITY & COMORBIDITIES ───────────────────────────────────────────────
+
+  # General
+  - name:        morbidite
+    label:       "Morbidity burden"
+    description: "Overall morbidity indicator"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    general
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_shock
+    label:       "Shock"
+    description: "Clinical shock at admission"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    general
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # Infections & Parasitic
+  - name:        has_gastroenteritis
+    label:       "Gastroenteritis"
+    description: "Presence of acute gastroenteritis"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    infections
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_pneumonia
+    label:       "Pneumonia"
+    description: "Clinical or radiological pneumonia"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    infections
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_tuberculosis
+    label:       "Tuberculosis"
+    description: "Confirmed or suspected TB"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    infections
+    phases:      ["1"]
+    order:
+      baseline:            3
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_digestive_candidiasis
+    label:       "Digestive candidiasis"
+    description: "Candida infection of the digestive tract"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    infections
+    phases:      ["1"]
+    order:
+      baseline:            4
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_hiv
+    label:       "HIV"
+    description: "HIV-positive status"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    infections
+    phases:      ["1"]
+    order:
+      baseline:            5
+      baseline_phase_1:    5
+      univariate_phase_1:  5
+      multivariate_phase_1: 5
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # Malaria
+  - name:        has_severe_malaria
+    label:       "Severe malaria"
+    description: "Any severe malaria diagnosis"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    malaria
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_severe_malaria_anemia
+    label:       "Severe malaria anemia"
+    description: "Severe malaria with associated anemia"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    malaria
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_neuro_malaria
+    label:       "Neurological malaria"
+    description: "Malaria with neurological complications"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    malaria
+    phases:      ["1"]
+    order:
+      baseline:            3
+      baseline_phase_1:    3
+      univariate_phase_1:  3
+      multivariate_phase_1: 3
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_other_severe_malaria
+    label:       "Other severe malaria"
+    description: "Other severe malaria manifestations"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    malaria
+    phases:      ["1"]
+    order:
+      baseline:            4
+      baseline_phase_1:    4
+      univariate_phase_1:  4
+      multivariate_phase_1: 4
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  # Anaemia
+  - name:        has_severe_anaemia
+    label:       "Severe anemia"
+    description: "Hemoglobin below severe threshold"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    anaemia
+    phases:      ["1"]
+    order:
+      baseline:            1
+      baseline_phase_1:    1
+      univariate_phase_1:  1
+      multivariate_phase_1: 1
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor
+
+  - name:        has_other_anemia
+    label:       "Other anemia"
+    description: "Non-severe or other types of anemia"
+    type:        categorical
+    domain:      morbidity
+    subgroup:    anaemia
+    phases:      ["1"]
+    order:
+      baseline:            2
+      baseline_phase_1:    2
+      univariate_phase_1:  2
+      multivariate_phase_1: 2
+    analysis:
+      include: true
+      roles:
+        baseline:             descriptor
+        baseline_phase_1:     descriptor
+        univariate_phase_1:   predictor
+        multivariate_phase_1: predictor

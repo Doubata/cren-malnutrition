@@ -69,58 +69,62 @@
 #' \code{.get_values_by_id()}, \code{\link{rle}}
 #'
 #' @export
-
-get_matching_series_str <- function(df, id_col, target_col, ref_col, attr_col = NULL, run_order, ids){
+get_matching_series_str <- function(df, id_col, target_col, ref_col, attr_col = NULL, run_order = NULL, ids) {
   
   # --- 1. Validation -------------------------------------------------------
-  .validate_matching_series_str_args(df, id_col, target_col, ref_col, attr_col, run_order, ids)
+  if (length(ids) == 0) return(character(0))
   
-  # --- 2. Column Selection -------------------------------------------------
-  # Append attr_col to the subset only when provided.
-  target_cols <- if (is.null(attr_col)) {
-    c(id_col, ref_col, target_col)
-  } else {
-    c(id_col, ref_col, target_col, attr_col)
-  }
+  # --- 2. Subset & Helper extraction --------------------------------------
+  sub_df <- df[df[[id_col]] %in% ids, , drop = FALSE]
   
-  # --- 3. Subset -----------------------------------------------------------
-  sub_df <- df[df[[id_col]] %in% ids, target_cols]
-  
-  # --- 4. Split by ID ------------------------------------------------------
-  # Two parallel named lists — one for the reference series, one for target.
   referencies_list <- .get_values_by_id(sub_df, ref_col, id_col)
-  values_list <- .get_values_by_id(sub_df, target_col, id_col, attr_col)
+  values_list      <- .get_values_by_id(sub_df, target_col, id_col, attr_col = attr_col)
   
   ids_char <- as.character(ids)
   
-  # --- 5. Encode & Align ---------------------------------------------------
-  result <- sapply(ids_char, function(id_char) {
+  safe_rle <- function(x) {
+    if (length(x) == 0) return(list(lengths = integer(0), values = character(0)))
+    rle(as.character(x))
+  }
+  
+  # --- 3. Robust Execution ------------------------------------------------
+  result <- vapply(ids_char, function(id_char) {
     
-    # Guard: ID absent from reference data → NA
-    if (!(id_char %in% names(referencies_list))) return(NA)
+    # Key existence checks
+    if (!id_char %in% names(referencies_list) || !id_char %in% names(values_list)) {
+      return(NA_character_)
+    }
     
     ref_vec <- referencies_list[[id_char]]
-    
-    # RLE on the reference series to identify run boundaries
-    ref_runs <- rle(as.character(ref_vec))
-    
-    # Guard: requested run does not exist for this ID → NA
-    if (run_order > length(ref_runs$values)) return(NA)
-    
-    # Derive start / end row indices for the run_order-th run
-    ends   <- cumsum(ref_runs$lengths)
-    starts <- c(1, head(ends, -1) + 1)
-    
-    # Get the position of a specific group run_order
-    s <- starts[run_order]
-    e <- ends[run_order]
-    
-    # Slice target values to the matched window, then RLE-encode and collapse
     val_vec <- values_list[[id_char]]
-    matching_runs <- rle(val_vec[s:e])
+    
+    if (length(ref_vec) == 0 || length(val_vec) == 0) return(NA_character_)
+    
+    # Handle optional run_order
+    if (is.null(run_order)) {
+      # Return runs across the entire target vector
+      matching_runs <- safe_rle(val_vec)
+    } else {
+      # Extract bounds for the specific run_order index
+      ref_runs <- safe_rle(ref_vec)
+      
+      # Boundary guard
+      if (run_order > length(ref_runs$values) || run_order < 1) return(NA_character_)
+      
+      lengths <- ref_runs$lengths
+      e <- sum(lengths[seq_len(run_order)])
+      s <- e - lengths[run_order] + 1
+      
+      # Bounds safety check on val_vec
+      if (e > length(val_vec)) return(NA_character_)
+      
+      matching_runs <- safe_rle(val_vec[s:e])
+    }
+    
     paste0(matching_runs$values, collapse = "-")
-  })
+    
+  }, FUN.VALUE = character(1), USE.NAMES = FALSE)
   
-  return(unname(result))
+  return(result)
 }
 

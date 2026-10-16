@@ -32,6 +32,10 @@
 #'                   transition detection to the \code{run_order}-th
 #'                   consecutive run in \code{phase_col}.
 #'                   Defaults to \code{NULL} (no restriction).
+#' @param pos        Optional positive integer. Specifies the exact relative position 
+#'                   after the first \code{from} state to check for the transition (e.g., 
+#'                   \code{pos = 1} checks the immediate next value). When \code{NULL} (default), 
+#'                   all subsequent positions after \code{from} are evaluated.
 #' @param verbose    Logical. Reserved for future diagnostic output.
 #'                   Defaults to \code{FALSE}.
 #'
@@ -119,10 +123,11 @@
 #'
 #' @export
 detect_state_transition <- function(df, id_col, phase_col, target_col,
-                                    from, to = NULL, ...,
+                                    from, to   = NULL, ...,
                                     attr_col   = NULL,
                                     ids        = NULL,
                                     run_order  = NULL,
+                                    pos        = NULL,
                                     verbose    = FALSE) {
   
   # --- 1. Symbol Capture ---------------------------------------------------
@@ -191,6 +196,25 @@ detect_state_transition <- function(df, id_col, phase_col, target_col,
     if (length(from_indices) == 0) return(FALSE)
     
     first_from <- from_indices[1]
+    
+    # Check bounds when 'pos' is specified
+    if (!is.null(pos)) {
+      # target_idx <- first_from + pos
+      target_idx <- pos
+      
+      # Out of bounds check
+      if (target_idx > length(values_vec)) return(FALSE)
+      
+      target_val <- values_vec[target_idx]
+      
+      if (is.null(to)) {
+        return(!(target_val %in% from))
+      } else {
+        return(target_val %in% to)
+      }
+    }
+    
+    # Default behavior: Search across all elements after 'first_from'
     
     # Edge case: 'from' is the last value — no room for a transition
     if (first_from == length(values_vec)) return(FALSE)

@@ -1,21 +1,15 @@
-add_health_status <- function(child_df, morbidity_df){
+
+add_health_status <- function(profile_data, follow_up_data, morbidity_data){
   
-  df_enriched <- child_df %>%
+  profile_data_enriched <- profile_data |>
     
-    left_join(morbidity_df , by = "id") %>%
+    left_join(morbidity_data , by = "id") |>
     
     mutate(
       
-      # --- Breastfeeding Status --------------------------------------------
-      is_breastfed = case_when(
-        allait == "oui" ~ TRUE,
-        allait == "non" ~ FALSE,
-        TRUE            ~ NA
-      ),
-      
-      # . Sequence of Phases during the stay ####
+      # Sequence of Phases during the stay ####
       phase_series = get_series_str(
-        df         = morbidity_df,
+        df         = follow_up_data,
         id_col     = "id",
         target_col = "phase",
         ids        = id
@@ -23,8 +17,6 @@ add_health_status <- function(child_df, morbidity_df){
       
       # Edema status
       has_edema = (coalesce(edema, 0) >= 1),
-      
-      is_vaccinated  = case_when(vaccAJ == "oui" ~ TRUE, vaccAJ == "non" ~ FALSE, TRUE ~ NA),
       
       # Handle composite variables
       morbidite      = rowSums(across(c(gastroenteriteAigue, deshydratation, choc, pneumopathieViraleBacterienne,
@@ -39,7 +31,7 @@ add_health_status <- function(child_df, morbidity_df){
       
       has_gastroenteritis  = (gastroenteriteAigue  == 1 | deshydratation == 1),
       
-      has_severe_anaemia   = (paluGraveAnemique    == 1 | autreAnemie    == 1),
+      has_severe_anaemia   = autreAnemie    == 1,
       
       # Dynamic logical conversion of specific columns and converts 1 to TRUE, 0 to FALSE
       across(c(choc, pneumopathieViraleBacterienne, paluGraveAnemique,paluGraveNeurologique,
@@ -47,6 +39,6 @@ add_health_status <- function(child_df, morbidity_df){
              ~ .x == 1, .names = "{CONFIG$morbidity_columns_map[.col]}"),
     )
     
-  return(df_enriched)
+  return(profile_data_enriched)
 }
 

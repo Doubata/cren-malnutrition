@@ -3,14 +3,14 @@
 #' Assign WHO F75 Feeding Frequency or Quantity per Patient
 #'
 #' @description
-#' For each row in \code{df}, looks up the WHO F75 therapeutic feeding table
+#' For each row in \code{data}, looks up the WHO F75 therapeutic feeding table
 #' and returns either the recommended feeding **frequency** (feeds/day) for a
 #' given quantity, or the recommended **quantity** (ml/feed) for a given
 #' frequency — depending on \code{measure_type}. Patients with severe oedema
-#' (grade ≥ 3) are routed to a dedicated lookup table (\code{f75_oed3_lkp_df});
-#' all others use the standard table (\code{f75_lkp_df}).
+#' (grade ≥ 3) are routed to a dedicated lookup table (\code{who_f75_oed3_data});
+#' all others use the standard table (\code{who_f75_data}).
 #'
-#' @param df               A data frame containing patient-level data.
+#' @param data             A data frame containing patient-level data.
 #' @param weight_col       Column name (quoted or unquoted) for patient weight in kg.
 #' @param food_col         Column name (quoted or unquoted) for the food type given.
 #' @param oedema_col       Column name (quoted or unquoted) for oedema grade
@@ -30,14 +30,14 @@
 #'     \item \code{"quantity"} — \code{target_col} holds a frequency
 #'           (12, 8, or 6); returns the matching WHO quantity (ml/feed).
 #'   }
-#' @param f75_lkp_df        WHO F75 lookup table for non-severe oedema patients.
+#' @param who_f75_data        WHO F75 lookup table for non-severe oedema patients.
 #'                             Must contain columns \code{weight_kg},
 #'                             \code{ml_per_2h}, \code{ml_per_3h}, \code{ml_per_4h}.
-#' @param f75_oed3_lkp_df   WHO F75 lookup table for severe oedema (grade ≥ 3)
-#'                             patients. Same column structure as \code{f75_lkp_df}.
+#' @param who_f75_oed3_data   WHO F75 lookup table for severe oedema (grade ≥ 3)
+#'                             patients. Same column structure as \code{who_f75_data}.
 #'
 #' @return
-#' An unnamed numeric vector the same length as \code{nrow(df)}. Each element
+#' An unnamed numeric vector the same length as \code{nrow(data)}. Each element
 #' is the looked-up frequency (feeds/day) or quantity (ml/feed) for that row.
 #' Returns \code{NA_real_} for rows where:
 #' \itemize{
@@ -71,16 +71,16 @@
 #'
 #' @examples
 #' # Frequency mode: given a quantity, find the WHO recommended frequency
-#' assign_who_f75x(df, weight_col = "weight_kg", food_col = "food_type",
+#' assign_who_f75x(data, weight_col = "weight_kg", food_col = "food_type",
 #'                 oedema_col = "oedema_grade", target_col = "ml_given",
 #'                 measure_type = "frequency",
-#'                 f75_lkp_df = who_f75, f75_oed3_lkp_df = who_f75_oed3)
+#'                 who_f75_data = who_f75, who_f75_oed3_data = who_f75_oed3)
 #'
 #' # Quantity mode: given a frequency, find the WHO recommended quantity
-#' assign_who_f75x(df, weight_col = "weight_kg", food_col = "food_type",
+#' assign_who_f75x(data, weight_col = "weight_kg", food_col = "food_type",
 #'                 oedema_col = "oedema_grade", target_col = "freq_given",
 #'                 measure_type = "quantity",
-#'                 f75_lkp_df = who_f75, f75_oed3_lkp_df = who_f75_oed3)
+#'                 who_f75_data = who_f75, who_f75_oed3_data = who_f75_oed3)
 #'
 #' @family WHO assignment
 #'
@@ -89,10 +89,10 @@
 #' \code{\link{get_series_str}}
 #'
 #' @export
-assign_who_f75x <- function(df, weight_col, food_col, oedema_col, target_col, ...,
+assign_who_f75x <- function(data, weight_col, food_col, oedema_col, target_col, ...,
                             type_food    = c("F75", "F75F"),
                             measure_type = c("frequency", "quantity"),
-                            f75_lkp_df, f75_oed3_lkp_df) {
+                            who_f75_data, who_f75_oed3_data) {
   
   # --- 1. Symbol Capture ---------------------------------------------------
   # Allows callers to pass bare column names (unquoted) or quoted strings.
@@ -104,19 +104,19 @@ assign_who_f75x <- function(df, weight_col, food_col, oedema_col, target_col, ..
   if (is.symbol(substitute(measure_type))) measure_type <- deparse(substitute(measure_type))
   
   # --- 2. Validation -------------------------------------------------------
-  .check_assign_who_f75x_args(df, weight_col, food_col, oedema_col, target_col, type_food, measure_type)
+  .check_assign_who_f75x_args(data, weight_col, food_col, oedema_col, target_col, type_food, measure_type)
   
   # --- 3. Vector Extraction ------------------------------------------------
   # Pre-extract columns for performance
-  weight  <- df[[weight_col]]
-  food    <- df[[food_col]]
-  oedema  <- df[[oedema_col]]
-  target  <- df[[target_col]]
+  weight  <- data[[weight_col]]
+  food    <- data[[food_col]]
+  oedema  <- data[[oedema_col]]
+  target  <- data[[target_col]]
 
   # --- 4. Initialisation ---------------------------------------------------
   # Standard WHO feeding frequencies (feeds/day) matching ml_per_2h/3h/4h columns
   freq    <- c(12, 8, 6)
-  results <- rep(NA_real_, nrow(df))
+  results <- rep(NA_real_, nrow(data))
   
   # --- 5. Food Filter ------------------------------------------------------
   # Only process rows with a recognised F75 food type
@@ -130,18 +130,18 @@ assign_who_f75x <- function(df, weight_col, food_col, oedema_col, target_col, ..
   moderate_oedema   <- valid_food & !severe
   
   # --- 7. Internal Lookup Helper -------------------------------------------
-  process_group <- function(mask, lkp_df) {
+  process_group <- function(mask, lkp_data) {
     if (length(mask) == 0) return(NULL)
     
     idx <- which(mask)
     
     # Map patient weights to the ceiling row in the lookup table
-    w_idx <- .lookup_who_idx(weight[idx], lkp_df[["weight_kg"]])
+    w_idx <- .lookup_who_idx(weight[idx], lkp_data[["weight_kg"]])
     
     # Build a [n × 3] value matrix: columns = x12, x8, x6 feeds/day
-    val_matrix <- cbind(lkp_df[["ml_per_2h"]][w_idx],
-                        lkp_df[["ml_per_3h"]][w_idx],
-                        lkp_df[["ml_per_4h"]][w_idx])
+    val_matrix <- cbind(lkp_data[["ml_per_2h"]][w_idx],
+                        lkp_data[["ml_per_3h"]][w_idx],
+                        lkp_data[["ml_per_4h"]][w_idx])
     
     input_vals <- target[idx]
     
@@ -160,9 +160,9 @@ assign_who_f75x <- function(df, weight_col, food_col, oedema_col, target_col, ..
   
   # --- 8. Assign Results ---------------------------------------------------
   if (length(moderate_oedema) > 0)
-    results[moderate_oedema] <- process_group(moderate_oedema, f75_lkp_df)
+    results[moderate_oedema] <- process_group(moderate_oedema, who_f75_data)
   if (length(severe_oedema) > 0)
-    results[severe_oedema]   <- process_group(severe_oedema,   f75_oed3_lkp_df)
+    results[severe_oedema]   <- process_group(severe_oedema,   who_f75_oed3_data)
   
   return(unname(results))
 }

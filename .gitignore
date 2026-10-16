@@ -5,9 +5,11 @@
 
 # Ignore the entire data directory
 data/
+_targets/
 
 *.csv
 *.xlsx
 *.rds
 *.sav
 *.dta
+

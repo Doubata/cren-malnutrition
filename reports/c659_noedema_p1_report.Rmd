@@ -1,0 +1,140 @@
+---
+title: Analysis of Factors Associated with Poor Response to Nutritional Treatment
+  in Severely Malnourished Children Aged 6–59 Months Without Edema and With Complications Treated (Phase 1).
+author: "Doubata Dramane Marius COULIBALY"
+date: '`r Sys.Date()`'
+output:
+  html_document: default
+  pdf_document:
+    extra_dependencies: ["pdflscape", "makecell", "booktabs"]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.width = 6.5,
+  out.width = "100%"
+)
+library(targets)
+library(gtsummary)
+library(flextable)
+# library(kableExtra)
+# library(booktabs)
+set_flextable_defaults(fonts_ignore = TRUE)
+targets::tar_load(
+  c(p1_summary_table_c659_noedema, domain_registry, subgroup_registry, p1_catalog_c659_noedema, p1_univariate_table_c659_noedema, p1_glm_final_table_c659_noedema)
+)
+```
+
+## 1. Methodology
+
+Descriptive analyses were conducted to characterize the cohort and the non-response to the nutritional treatment. Continuous variables were summarized using medians and interquartile ranges (25^th^ - 75^th^ percentile) due to their non-normal distribution, whereas categorical variables were summarized as counts and percentages (%).
+
+Differences between groups (success and failure) were assessed using the Wilcoxon rank-sum test or Kruskal–Wallis test for continuous variables and Pearson's chi-square or Fisher's exact test for categorical variables, as appropriate.
+
+Univariable logistic regression analyses were performed to estimate crude associations between independent variables and the dependent variable. Variables considered clinically relevant or statistically associated with the non-response to the nutritional treatment at *p* \< 0.20 were included in a multivariable logistic regression.
+
+Prior to model building, pairwise correlations among independent variables were examined to identify highly correlated predictors and assess potential multicollinearity. Pearson correlation coefficients were computed for continuous variables (or Spearman's rank correlations for non-normally distributed variables). Variables exhibiting strong correlations (\|r\| $\geq 0.70$) were carefully evaluated to avoid redundancy. Variance Inflation Factors (VIFs) were subsequently calculated in the multivariable model, with VIF values \> 5 indicating potential multicolliniarity.
+
+Model selection was guided by likelihood ratio tests and the principle of parsimony. A stepwise selection procedure was used to identify the most parsimonious model (based on the Akaike Information Criterion (AIC)) by retaining variables that improved model fit while excluding predictors that contributed little additional information.
+
+Adjusted odds ratios (aORs) with 95% confidence intervals (CIs) were reported. Statistical significance in the final model was defined as a two-sided *p* \< 0.05. A variable was significantly associated with the risk of nutritional treatment failure if: i) the odds ratio (OR) was \> 1 with a lower limit of the confidence interval (CI) \> 1; or ii) OR\<1 with upper CI limit \<1; and p-value was \<0.05.
+
+All analyses were conducted using R (version 4.3.0).
+
+\newpage
+
+## 2. Study population
+
+The analytic sample comprised 1,342 children aged 6-59 months treated for severe acute malnutrition during Phase 1, of whom 666 (49.6%) met the definition of non-response to treatment and 676 (50.4%) were classified as responders. The near-even split between groups provided balanced statistical power for bivariate and multivariable comparisons. Missingness was non-trivial and variable across covariates, ranging from negligible (12 missing for locality) to substantial (933 missing for breastfeeding status, 877 for food intolerance, 825 for death-in-phase, 770 for vaccination status), reflecting differential data capture across admission types rather than a uniform pattern of loss.
+
+## 3. **Descriptive Characteristics**
+
+The cohort was predominantly young, with a median age of 15 months (Q1-Q3: 10-22) and the large majority (81.6%) falling in the 6-24 month band rather than the 25-59 month band (18.4%). Sex distribution was balanced (55.2% male, 44.8% female). Most children resided in rural areas (75.6% vs. 24.4% urban). Vaccination coverage among those with data was relatively high (76.6% up to date). New admissions accounted for the majority of cases (86.2%), with readmissions comprising 13.8%. Comorbid infections were frequent: gastroenteritis (70.5%), pneumonia (59.3%), severe malaria (40.0%), and other/severe anemia (27.6% each) were the most prevalent, while tuberculosis (0.6%) and HIV (1.4%) were rare. Overall mortality during Phase 1 (among children with recorded outcome) was 15.9%, and 2.5% of children died on day 1. Type of discharge among those with data showed 66.3% recovered/transferred, 17.8% absconded, and 15.9% died.
+
+### 4. **Bivariate Analysis**
+
+Table 1: Association between explanatory variables and outcome at phase 1.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_summary_table_c659_noedema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  # keep_with_next(i = label_rows, part = "body") |>
+  flextable::fontsize(size = 8.5, part = "all") |>
+  flextable::width(j = 1, width = 2.5) |>      # Characteristic (long labels)
+  flextable::width(j = 2:4, width = 0.85) |>   # FALSE / TRUE / Overall
+  flextable::width(j = 5:6, width = 0.55)      # p-value / q-value
+```
+
+\newpage
+
+```{r p1-domain-report, results = 'asis', echo=FALSE}
+domain_registry_sub <- domain_registry[domain_registry$domain != "outcome", ]
+domain_labels   <- domain_label_lookup(domain_registry_sub) # named vector: key -> label
+subgroup_labels <- subgroup_label_lookup(subgroup_registry)
+
+for (d in domain_display_order(domain_registry_sub)) {
+  cat("\n\n### ", domain_labels[[d]], "\n\n")
+  
+  subgroups <- subgroup_display_order(subgroup_registry, domain = d)
+  
+  if (length(subgroups) == 0) {
+    plots <- pull_plots(p1_catalog_c659_noedema, domain = d)
+    render_plot_grid(plots, ncol = 3, id = paste0("c659_noedema_p1_", d))
+  } else {
+    for (sg in subgroups) {
+      plots <- pull_plots(p1_catalog_c659_noedema, domain = d, subgroup = sg)
+      if (length(plots) > 0) {
+        cat("\n\n#### ", subgroup_labels[[sg]], "\n\n")
+        render_plot_grid(plots, ncol = 3, id = paste0("c659_noedema_p1_", d, "_", sg))
+      }
+    }
+  }
+}
+```
+
+Non-response was strongly associated with markers of treatment intensity and clinical severity rather than with baseline demographic characteristics. Age (p=0.051), age group (p=0.354), sex (p=0.935), and vaccination status (p=0.495) showed no significant association with non-response. In contrast, locality (p=0.004), admission type (p=0.022), incident edema (0% vs. 3.2%, p\<0.001), WHZ error proportion (p\<0.001), tube feeding duration (median 0 vs. 0, but max 4 vs. 19 days, p\<0.001), and phase length (median 3 vs. 6 days, p\<0.001) all differed significantly between responders and non-responders. Nutritional treatment pathway was strongly associated with outcome: non-responders were far more likely to have undergone F75-F75F/F75F-F75 transitions (43.1% vs. 7.4%) and F75-to-F75F transition specifically (36.0% vs. 0%, p\<0.001), while responders were more often managed on F75 alone (55.0% vs. 29.4%).
+
+Death in phase occurred exclusively among non-responders (30.5% vs. 0%, p\<0.001), as did day-1 mortality (5.0% vs. 0%, p\<0.001). Feeding-target deviations (F75 frequency and quantity below/above target, F75 adherence below/above target) were all significantly associated with non-response (p≤0.038 for most, p\<0.001 for adherence measures), except F75 quantity above target (p=0.789). Morbidity burden was higher among non-responders (median 2 [2-3] vs. 2 [1-3], p\<0.001), driven by higher prevalence of shock (4.0% vs. 1.3%, p=0.003), gastroenteritis (78.9% vs. 61.8%, p\<0.001), pneumonia (64.2% vs. 54.3%, p\<0.001), and digestive candidiasis (17.7% vs. 8.7%, p\<0.001). Severe malaria showed an inverse association, being more common among responders (42.9% vs. 37.1%, p=0.030). Tuberculosis, HIV, neurological malaria, severe anemia, and other anemia were not significantly associated with non response. Type of discharge differed markedly by outcome status (p\<0.001), with death recorded only among non-responders (30.5%) and absconding more frequent among responders (25.0% vs. 11.2%).
+
+**Table 2:** Results of the univariate logistic regression analysis between explanatory variables and outcome.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_univariate_table_c659_noedema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  # keep_with_next(i = label_rows, part = "body") |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::width(j = 1, width = 2.5)
+```
+
+In univariate logistic regression, the strongest predictors of non-response were F75 adherence below target (OR 3.02, 95% CI 2.40-3.81, p\<0.001) and shock (OR 3.21, 95% CI 1.51-7.65, p=0.002), followed by gastroenteritis (OR 2.31, 95% CI 1.80-2.96, p\<0.001) and digestive candidiasis (OR 2.27, 95% CI 1.62-3.23, p\<0.001). Pneumonia (OR 1.51, 95% CI 1.21-1.89, p\<0.001) and readmission (OR 1.45, 95% CI 1.06-2.00, p=0.022) were also associated with increased odds of non-response. Rural residence (OR 0.69, 95% CI 0.54-0.89, p=0.004) and severe malaria (OR 0.78, 95% CI 0.63-0.98, p=0.030) were associated with reduced odds. Severe anemia, breastfeeding status, HIV, age group, vaccination status, and sex were not significant univariate predictors (p $\ge 0.078$).
+
+\newpage
+
+# 5. Multivariate logistic regression analyses
+
+Table 3 : Results of the generalize logistic regression analysis at Phase 1.
+
+```{r, echo=FALSE}
+targets::tar_read(p1_glm_final_table_c659_noedema) |>
+  as_flex_table() |>
+  padding(padding.top = 0, padding.bottom = 0, part = "body") |>
+  flextable::compose(
+    j = "estimate",  # check actual column key name below if this errors
+    value = as_paragraph(
+      ifelse(stringr::str_detect(estimate, "^NA"), 
+             stringr::str_remove(estimate, "^NA"), 
+             estimate)
+    ),
+    part = "body"
+  ) |>
+  flextable::fontsize(size = 9, part = "all") |>
+  flextable::width(j = 1, width = 1.6) |>      # Characteristic (long labels)
+  flextable::width(j = 2:4, width = 0.40) |>   # FALSE / TRUE / Overall
+  flextable::width(j = 5, width = 0.80) |>     # FALSE / TRUE / Overall
+  flextable::width(j = 6:8, width = 0.50)     # p-value / q-value / GVIF
+```
+
+In the adjusted GLM model (n=1,203), five predictors retained independent association with non-response after multiple-testing correction, all with low collinearity (VIF=1.0 for all variables). F75 adherence below target remained the strongest independent predictor (adjusted OR 2.89, 95% CI 2.25-3.72, q\<0.001), followed by gastroenteritis (aOR 1.89, 95% CI 1.44-2.48, q\<0.001), pneumonia (aOR 1.48, 95% CI 1.15-1.89, q=0.004), and digestive candidiasis (aOR 1.64, 95% CI 1.14-2.38, q=0.011). Locality and admission type, both significant in bivariate analysis, were attenuated after adjustment and no longer reached significance (rural aOR 0.78, 95% CI 0.59-1.03, q=0.077; readmission aOR 1.37, 95% CI 0.97-1.95, q=0.077), though both showed directionally consistent trends with their univariate estimates. Severe malaria, significant and protective in univariate analysis, was not retained in the final multivariable model.

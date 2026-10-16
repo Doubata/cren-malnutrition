@@ -1,21 +1,22 @@
-
-add_anthropometrics <- function(child_df, monitoring_df){
+ 
+add_anthropometrics <- function(profile_data, follow_up_data){
   
-  df_enriched <- child_df %>%
+  profile_data_enriched <- profile_data |>
     
     mutate(
       # Set the first value of the earliest day ---------------------------------
-      height           = get_value_at(monitoring_df, "id", "taille",   1, ids = child_df$id),
-      weight           = get_value_at(monitoring_df, "id", "poids",    1, ids = child_df$id),
-      whz              = get_value_at(monitoring_df, "id", "ptZscore", 1, ids = child_df$id),
-      muac             = get_value_at(monitoring_df, "id", "pbOrPc",   1, ids = child_df$id),
-      muac_val         = get_value_at(monitoring_df, "id", "pbOrPcV",  1, ids = child_df$id),
-      edema            = get_value_at(monitoring_df, "id", "oedemes",  1, ids = child_df$id),
-      admission_phase  = get_value_at(monitoring_df, "id", "phase",    1, ids = child_df$id),
-      who_whz          = get_value_at(monitoring_df, "id", "who_whz",  1, ids = child_df$id),
-
-      prop_whz_error = summarise_event(
-        df          = monitoring_df,
+      height           = get_value_at(follow_up_data, "id", "taille",   1, ids = profile_data$id),
+      weight           = get_value_at(follow_up_data, "id", "poids",    1, ids = profile_data$id),
+      whz              = get_value_at(follow_up_data, "id", "ptZscore", 1, ids = profile_data$id),
+      muac             = get_value_at(follow_up_data, "id", "pbOrPc",   1, ids = profile_data$id),
+      muac_val         = get_value_at(follow_up_data, "id", "pbOrPcV",  1, ids = profile_data$id),
+      edema            = get_value_at(follow_up_data, "id", "oedemes",  1, ids = profile_data$id),
+      admission_phase  = get_value_at(follow_up_data, "id", "phase",    1, ids = profile_data$id),
+      # Edema status (Using T/F)
+      has_edema = (coalesce(edema, 0) >= 1),
+      
+      prop_whz_error_p1 = summarise_event(
+        df          = follow_up_data,
         id_col      = "id",
         phase_col   = "phase",
         event       = "Not Equal",
@@ -23,9 +24,8 @@ add_anthropometrics <- function(child_df, monitoring_df){
         ids         = id,
         run_order   = 1,
         type        = "proportion"
-      )
-      
+      ),
     )
   
-  return(df_enriched)
+  return(profile_data_enriched)
 }

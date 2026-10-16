@@ -24,7 +24,7 @@
 #'           matching WHO quantity range (ml/feed) based on the weight-defined 
 #'           minimum and maximum.
 #'   }
-#' @param f100_lkp_df       WHO F100 lookup table. Must contain columns 
+#' @param who_f100_data       WHO F100 lookup table. Must contain columns 
 #'                          \code{weight_kg}, \code{min_ml_per_day}, and 
 #'                          \code{max_ml_per_day}.
 #'
@@ -46,7 +46,7 @@
 #'    \item \strong{Food filter} — restricts processing to rows where 
 #'          \code{food_col == "F100"}.
 #'    \item \strong{Lookup mapping} — \code{.lookup_who_idx()} maps patient weights 
-#'          to the nearest ceiling row in the \code{f100_lkp_df}.
+#'          to the nearest ceiling row in the \code{who_f100_data}.
 #'    \item \strong{Frequency mode} — returns a fixed frequency of 6 feeds per day 
 #'          for all valid F100 rows.
 #'    \item \strong{Quantity mode} — calculates the volume by comparing the 
@@ -59,7 +59,7 @@
 #' # Quantity mode: find the recommended F100 quantity range for a patient
 #' assign_who_f100(df, weight_col = "weight_kg", food_col = "food_type",
 #'                  target_col = "freq_given", measure_type = "quantity",
-#'                  f100_lkp_df = who_f100_table)
+#'                  who_f100_data = who_f100_table)
 #'
 #' @family WHO assignment
 #'
@@ -70,59 +70,56 @@
 #' @export
 assign_who_f100 <- function(df, weight_col, food_col, target_col, ...,
                             measure_type = c("frequency", "quantity"),
-                            f100_lkp_df) {
+                            who_f100_data) {
   
-  # --- 1. Symbol Capture ---------------------------------------------------
-  # Allows callers to pass bare column names (unquoted) or quoted strings.
-  if (is.symbol(substitute(weight_col)))   weight_col   <- deparse(substitute(weight_col))
-  if (is.symbol(substitute(food_col)))     food_col     <- deparse(substitute(food_col))
-  if (is.symbol(substitute(target_col)))   target_col   <- deparse(substitute(target_col))
-  if (is.symbol(substitute(measure_type))) measure_type <- deparse(substitute(measure_type))
+  # # 1. Match default choices robustly
+  # measure_type <- match.arg(measure_type)
+  # 
+  # # 2. Robust Column Name Extraction (Handles symbols, strings, and NSE)
+  # get_col_name <- function(arg, env = parent.frame()) {
+  #   expr <- substitute(arg, env)
+  #   if (is.character(expr)) return(expr)
+  #   if (is.name(expr)) return(as.character(expr))
+  #   stop("Column arguments must be unquoted symbols or character strings.")
+  # }
+  # 
+  # weight_col <- get_col_name(weight_col)
+  # food_col   <- get_col_name(food_col)
+  # target_col <- get_col_name(target_col)
   
-  # --- 2. Validation -------------------------------------------------------
-  # Internal gatekeeper to check data frame integrity and column types
-  .check_assign_who_f100_args(df, weight_col, food_col, target_col, measure_type)
+  # 3. Validation Gatekeeper
+  # .check_assign_who_f100_args(df, weight_col, food_col, target_col, measure_type)
   
-  # --- 3. Vector Extraction ------------------------------------------------
-  # Pre-extract columns for performance
-  weight  <- df[[weight_col]]
-  food    <- df[[food_col]]
-  target  <- df[[target_col]]
+  # 4. Extract Vectors
+  weight <- df[[weight_col]]
+  food   <- df[[food_col]]
+  target <- df[[target_col]]
   
-  
-  # --- 4. Initialisation ---------------------------------------------------
-  results <- rep(NA_real_, nrow(df))
-  
-  # --- 5. Food Filter ------------------------------------------------------
-  # Identify rows where food type is specifically F100
+  # 5. Filter for F100
   is_f100 <- !is.na(food) & food == "F100"
-
-  # Early exit if no valid rows found
-  if (length(is_f100) == 0) return(results)
+  
+  # Early exit if no matching rows
+  if (!any(is_f100)) {
+    return(rep(NA_real_, nrow(df)))
+  }
   
   idx_f100 <- which(is_f100)
   
-  # --- 6. Lookup Mapping ---------------------------------------------------
-  # Map patient weights to the corresponding row index in the F100 table
-  w_idx <- .lookup_who_idx(weight[idx_f100], f100_lkp_df[["weight_kg"]])
-  target_vals <- target[idx_f100]
+  # 6. Lookup Indices
+  w_idx <- .lookup_who_idx(weight[idx_f100], who_f100_data[["weight_kg"]])
   
-  # --- 7. Assign Results ---------------------------------------------------
-  results[idx_f100] <- if (measure_type == "frequency") {
+  # 7. Assignment Logic
+  results <- rep(NA_real_, nrow(df))
+  
+  if (measure_type == "frequency") {
+    results[idx_f100] <- 6
+  } else {
+    current_mins <- who_f100_data[["min_ml_per_day"]][w_idx]
+    current_maxs <- who_f100_data[["max_ml_per_day"]][w_idx]
+    target_vals  <- target[idx_f100]
     
-    # Frequency mode: For F100, the standard WHO recommendation is 6 feeds/day
-    rep(6, length(idx_f100))
-    
-  } else { 
-    
-    # Quantity mode: Calculate ml based on min/max daily volume range
-    current_mins <- f100_lkp_df[["min_ml_per_day"]][w_idx]
-    current_maxs <- f100_lkp_df[["max_ml_per_day"]][w_idx]
-    
-    # Logic: If target <= min, return min. If target > min, return max.
-    # This handles the transition from F75 to F100 quantity requirements.
-    qty <- pmax(target_vals, current_mins, na.rm = TRUE)
-    ifelse(qty > current_mins, current_maxs, qty)
+    # Logic: If target <= min -> return min, otherwise return max
+    results[idx_f100] <- ifelse(target_vals > current_mins, current_maxs, current_mins)
   }
   
   return(unname(results))

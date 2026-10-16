@@ -5,6 +5,7 @@
 
 # Ignore the entire data directory
 data/
+reports/
 _targets/
 
 *.csv
